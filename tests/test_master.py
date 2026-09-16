@@ -85,6 +85,9 @@ def test_sequence_increments():
     m = RtuMaster(FakeLink(None))
     assert m.execute(REQ).seq == 1
     assert m.execute(REQ).seq == 2
+    assert m.seq == 2
+    # Après reconnexion, la numérotation continue
+    assert RtuMaster(FakeLink(None), seq_start=m.seq).execute(REQ).seq == 3
 
 
 def test_invalid_request_raises():

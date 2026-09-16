@@ -27,6 +27,7 @@ class ModbusWorker(QObject):
         super().__init__()
         self._link: SerialLink | None = None
         self._master: RtuMaster | None = None
+        self._seq = 0  # numérotation des échanges, conservée d'une connexion à l'autre
 
     @property
     def is_open(self) -> bool:
@@ -42,7 +43,7 @@ class ModbusWorker(QObject):
             self.link_error.emit(str(exc))
             return
         self._link = link
-        self._master = RtuMaster(link)
+        self._master = RtuMaster(link, seq_start=self._seq)
         self.connected.emit(settings)
 
     @Slot()
@@ -65,6 +66,8 @@ class ModbusWorker(QObject):
         self.record_ready.emit(record)
 
     def _close_quietly(self) -> None:
+        if self._master is not None:
+            self._seq = self._master.seq
         if self._link is not None:
             self._link.close()
         self._link = None

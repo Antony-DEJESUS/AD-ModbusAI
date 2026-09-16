@@ -13,9 +13,13 @@ from modbusai.transport.serial_link import SerialLink
 
 
 class RtuMaster:
-    def __init__(self, link: SerialLink) -> None:
+    def __init__(self, link: SerialLink, seq_start: int = 0) -> None:
         self.link = link
-        self._seq = 0
+        self._seq = seq_start  # dernier numéro attribué ; continu sur la session même après reconnexion
+
+    @property
+    def seq(self) -> int:
+        return self._seq
 
     @property
     def settings(self):
