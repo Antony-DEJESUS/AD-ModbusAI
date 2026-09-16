@@ -1,11 +1,12 @@
-"""Console de log : une ligne par échange (horodatage, TX, RX, temps, erreur)."""
+"""Console de log : une ligne par échange (horodatage, TX, RX, temps, erreur), et son bandeau."""
 
 from __future__ import annotations
 
 from html import escape
 
+from PySide6.QtCore import Signal
 from PySide6.QtGui import QFont, QFontDatabase
-from PySide6.QtWidgets import QPlainTextEdit, QWidget
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
 
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus
 
@@ -47,3 +48,38 @@ class LogConsole(QPlainTextEdit):
 
     def log_error(self, text: str) -> None:
         self.appendHtml(f'<span style="color:#e5534b">{escape(text)}</span>')
+
+
+class LogPanel(QWidget):
+    """Console de log avec son bandeau : titre, COPIER (presse-papiers), EFFACER JOURNAL."""
+
+    copied = Signal(int)  # nombre de lignes copiées
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.console = LogConsole()
+        self.copy_btn = QPushButton("COPIER")
+        self.copy_btn.setToolTip("Copier tout le journal dans le presse-papiers")
+        self.clear_btn = QPushButton("EFFACER JOURNAL")
+        self.clear_btn.setToolTip("Vider la console (la grille et le dernier échange sont conservés)")
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.addWidget(QLabel("Journal"))
+        header.addStretch(1)
+        header.addWidget(self.copy_btn)
+        header.addWidget(self.clear_btn)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+        layout.addLayout(header)
+        layout.addWidget(self.console, 1)
+
+        self.copy_btn.clicked.connect(self._copy_all)
+        self.clear_btn.clicked.connect(self.console.clear)
+
+    def _copy_all(self) -> None:
+        text = self.console.toPlainText()
+        QApplication.clipboard().setText(text)
+        self.copied.emit(len(text.splitlines()) if text else 0)

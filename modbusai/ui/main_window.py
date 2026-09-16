@@ -27,7 +27,7 @@ from modbusai.ui.widgets.actions_panel import ActionsPanel
 from modbusai.ui.widgets.config_dialog import ConfigDialog
 from modbusai.ui.widgets.connection_bar import ConnectionBar
 from modbusai.ui.widgets.exchange_panel import ExchangePanel
-from modbusai.ui.widgets.log_console import LogConsole
+from modbusai.ui.widgets.log_console import LogPanel
 from modbusai.ui.widgets.register_grid import RegisterGrid
 from modbusai.ui.widgets.request_bar import RequestBar
 from modbusai.ui.workers import ModbusWorker
@@ -61,7 +61,8 @@ class MainWindow(QMainWindow):
         self.actions = ActionsPanel()
         self.grid = RegisterGrid()
         self.exchange = ExchangePanel()
-        self.console = LogConsole()
+        self.log_panel = LogPanel()
+        self.console = self.log_panel.console
         self.status_label = QLabel("Status : déconnecté")
 
         middle = QSplitter(Qt.Orientation.Horizontal)
@@ -74,7 +75,7 @@ class MainWindow(QMainWindow):
 
         vertical = QSplitter(Qt.Orientation.Vertical)
         vertical.addWidget(middle)
-        vertical.addWidget(self.console)
+        vertical.addWidget(self.log_panel)
         vertical.setStretchFactor(0, 3)
         vertical.setStretchFactor(1, 1)
         vertical.setChildrenCollapsible(False)
@@ -121,6 +122,7 @@ class MainWindow(QMainWindow):
         self.actions.display_changed.connect(self._refresh_grid)
         self.actions.cyclic.toggled.connect(self._on_cyclic_toggled)
         self.exchange.clear_requested.connect(self._clear)
+        self.log_panel.copied.connect(lambda n: self._set_status(f"Journal copié dans le presse-papiers ({n} lignes)"))
 
         self.connection_bar.show_settings(self._settings)
         self._on_request_changed()
