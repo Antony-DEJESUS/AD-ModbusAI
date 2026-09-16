@@ -53,7 +53,8 @@ class ConnectionBar(QFrame):
         self.connect_btn.setEnabled(not connected)
         self.disconnect_btn.setEnabled(connected)
         self.config_btn.setEnabled(not connected)
-        self.summary.setStyleSheet("font-weight: bold; color: %s;" % ("#1a7f37" if connected else "black"))
+        # Couleur du thème quand déconnecté (thème sombre Windows compris), vert quand connecté
+        self.summary.setStyleSheet("font-weight: bold; color: #2ea043;" if connected else "font-weight: bold;")
 
 
 def _vsep() -> QFrame:

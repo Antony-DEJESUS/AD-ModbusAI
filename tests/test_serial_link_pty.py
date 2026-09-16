@@ -1,6 +1,5 @@
 """Intégration SerialLink + RtuMaster sur pseudo-terminal (Linux uniquement)."""
 
-import sys
 import threading
 
 import pytest
@@ -9,9 +8,11 @@ from modbusai.modbus.master import RtuMaster
 from modbusai.modbus.records import ExchangeStatus, FunctionCode, Request
 from modbusai.transport.records import LinkState, SerialSettings, TransmitNotAllowed, TransportError
 from modbusai.transport.serial_link import SerialLink
-from tests.fake_slave import FakeSlave
 
-pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="pseudo-terminal Linux requis")
+# Sous Windows, ``pty`` et ``termios`` n'existent pas : tout le module est ignoré
+# à la collecte, avant d'importer l'esclave simulé.
+pytest.importorskip("pty", reason="pseudo-terminal Linux requis")
+from tests.fake_slave import FakeSlave  # noqa: E402
 
 
 @pytest.fixture

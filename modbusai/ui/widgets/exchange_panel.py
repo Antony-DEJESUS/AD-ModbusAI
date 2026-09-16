@@ -56,7 +56,7 @@ class ExchangePanel(QFrame):
 
     def show_record(self, rec: ExchangeRecord) -> None:
         self.status.setText(rec.status.name)
-        self.status.setStyleSheet("font-weight: bold; color: %s;" % ("#1a7f37" if rec.ok else "#c0392b"))
+        self.status.setStyleSheet("font-weight: bold; color: %s;" % ("#2ea043" if rec.ok else "#e5534b"))
         self.response_time.setText(f"{rec.response_time_ms:.1f} ms" if rec.response_time_ms is not None else "-")
         tt = rec.transaction_time_ms
         self.transaction_time.setText(f"{tt:.1f} ms" if tt is not None else "-")

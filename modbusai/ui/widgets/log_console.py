@@ -10,12 +10,12 @@ from PySide6.QtWidgets import QPlainTextEdit, QWidget
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus
 
 _STATUS_STYLE = {
-    ExchangeStatus.OK: ("OK", "#1a7f37"),
-    ExchangeStatus.TIMEOUT: ("TIMEOUT", "#b35c00"),
-    ExchangeStatus.CRC_ERROR: ("ERREUR CRC", "#c0392b"),
-    ExchangeStatus.MODBUS_EXCEPTION: ("EXCEPTION", "#c0392b"),
-    ExchangeStatus.BAD_RESPONSE: ("REPONSE INCOHERENTE", "#c0392b"),
-    ExchangeStatus.TRANSPORT_ERROR: ("ERREUR LIAISON", "#7d3c98"),
+    ExchangeStatus.OK: ("OK", "#2ea043"),
+    ExchangeStatus.TIMEOUT: ("TIMEOUT", "#d29922"),
+    ExchangeStatus.CRC_ERROR: ("ERREUR CRC", "#e5534b"),
+    ExchangeStatus.MODBUS_EXCEPTION: ("EXCEPTION", "#e5534b"),
+    ExchangeStatus.BAD_RESPONSE: ("REPONSE INCOHERENTE", "#e5534b"),
+    ExchangeStatus.TRANSPORT_ERROR: ("ERREUR LIAISON", "#a371f7"),
 }
 
 
@@ -43,7 +43,7 @@ class LogConsole(QPlainTextEdit):
         self.appendHtml(f'<span style="white-space:pre">{line}</span>{tail}')
 
     def log_info(self, text: str) -> None:
-        self.appendHtml(f'<span style="color:#555">{escape(text)}</span>')
+        self.appendHtml(f'<span style="color:#8b949e">{escape(text)}</span>')
 
     def log_error(self, text: str) -> None:
-        self.appendHtml(f'<span style="color:#c0392b">{escape(text)}</span>')
+        self.appendHtml(f'<span style="color:#e5534b">{escape(text)}</span>')

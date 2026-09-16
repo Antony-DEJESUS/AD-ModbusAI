@@ -45,9 +45,13 @@ class RegisterGrid(QTableWidget):
         return out
 
     def mark_stale(self, stale: bool) -> None:
-        """Grise les valeurs quand elles ne reflètent plus une lecture réussie."""
-        color = Qt.GlobalColor.gray if stale else Qt.GlobalColor.black
+        """Grise les valeurs quand elles ne reflètent plus une lecture réussie.
+        Sinon, retour à la couleur du thème (lisible en clair comme en sombre)."""
         for i in range(self.rowCount()):
             item = self.item(i, 1)
-            if item is not None:
-                item.setForeground(color)
+            if item is None:
+                continue
+            if stale:
+                item.setForeground(Qt.GlobalColor.gray)
+            else:
+                item.setData(Qt.ItemDataRole.ForegroundRole, None)
