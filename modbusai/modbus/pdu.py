@@ -18,6 +18,9 @@ WRITE_FUNCTIONS = (
     FunctionCode.WRITE_MULTIPLE_REGISTERS,
 )
 
+IDENTIFICATION_FUNCTIONS = (FunctionCode.REPORT_SLAVE_ID, FunctionCode.READ_DEVICE_ID)
+MEI_READ_DEVICE_ID = 0x0E
+
 MAX_READ_BITS = 2000
 MAX_READ_REGISTERS = 125
 MAX_WRITE_BITS = 1968
@@ -51,6 +54,14 @@ def validate_request(req: Request) -> None:
             raise ValueError(f"FC16 : 1..{MAX_WRITE_REGISTERS} valeurs attendues")
         if any(not 0 <= v <= 0xFFFF for v in req.values):
             raise ValueError("FC16 : valeurs 0..65535 attendues")
+    elif fc is FunctionCode.READ_DEVICE_ID:
+        if not 1 <= req.address <= 4:
+            raise ValueError("FC43 : code de lecture 1..4 attendu")
+        if not 0 <= req.count <= 0xFF:
+            raise ValueError("FC43 : identifiant d'objet 0..255 attendu")
+        return
+    elif fc is FunctionCode.REPORT_SLAVE_ID:
+        return
     if req.address + max(req.count, len(req.values), 1) > 0x10000:
         raise ValueError("Adresse + longueur dépasse 65535")
 
@@ -87,6 +98,10 @@ def build_pdu(req: Request) -> bytes:
             + bytes([len(payload)])
             + payload
         )
+    if fc is FunctionCode.REPORT_SLAVE_ID:
+        return bytes([fc])
+    if fc is FunctionCode.READ_DEVICE_ID:
+        return bytes([fc, MEI_READ_DEVICE_ID, req.address, req.count])
     if fc is FunctionCode.WRITE_MULTIPLE_REGISTERS:
         payload = b"".join(v.to_bytes(2, "big") for v in req.values)
         return (
@@ -104,9 +119,11 @@ def build_adu(req: Request) -> bytes:
     return append_crc(bytes([req.slave_id]) + build_pdu(req))
 
 
-def expected_response_length(req: Request) -> int:
-    """Longueur attendue de la réponse normale (esclave + PDU + CRC)."""
+def expected_response_length(req: Request) -> int | None:
+    """Longueur attendue de la réponse normale (esclave + PDU + CRC) ; None si variable."""
     fc = req.function
+    if fc in IDENTIFICATION_FUNCTIONS:
+        return None
     if fc in READ_BITS:
         return 5 + (req.count + 7) // 8
     if fc in READ_REGISTERS:
@@ -118,8 +135,9 @@ def parse_response(req: Request, adu: bytes) -> tuple[int, ...]:
     """Décode la réponse à ``req``.
 
     Renvoie les valeurs lues (registres 16 bits ou bits 0/1) ; tuple vide pour
-    une écriture acquittée. Lève ``CrcError``, ``ModbusException`` ou
-    ``BadResponse``.
+    une écriture acquittée ; octets bruts du corps pour FC17 et FC43 (décodés
+    par ``analysis.identification``). Lève ``CrcError``, ``ModbusException``
+    ou ``BadResponse``.
     """
     if len(adu) < 5 or not check_crc(adu):
         # Une réponse d'exception fait 5 octets ; en dessous, le CRC ne peut être bon.
@@ -134,6 +152,15 @@ def parse_response(req: Request, adu: bytes) -> tuple[int, ...]:
         raise ModbusException(req.function, body[0])
     if fc != req.function:
         raise BadResponse(f"Code fonction {fc:02X} au lieu de {req.function:02X}")
+
+    if req.function is FunctionCode.REPORT_SLAVE_ID:
+        if len(body) < 1 or body[0] != len(body) - 1:
+            raise BadResponse("FC17 : compteur d'octets incohérent")
+        return tuple(body[1:])
+    if req.function is FunctionCode.READ_DEVICE_ID:
+        if len(body) < 6 or body[0] != MEI_READ_DEVICE_ID:
+            raise BadResponse("FC43 : type MEI inattendu")
+        return tuple(body)
 
     if req.function in READ_BITS:
         nbytes = (req.count + 7) // 8

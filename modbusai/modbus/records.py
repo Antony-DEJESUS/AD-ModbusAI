@@ -24,6 +24,8 @@ class FunctionCode(enum.IntEnum):
     WRITE_SINGLE_REGISTER = 0x06
     WRITE_MULTIPLE_COILS = 0x0F
     WRITE_MULTIPLE_REGISTERS = 0x10
+    REPORT_SLAVE_ID = 0x11  # ligne série uniquement, contenu propre au constructeur
+    READ_DEVICE_ID = 0x2B  # MEI 0x0E : VendorName, ProductCode, Revision...
 
 
 class ExchangeStatus(enum.Enum):
@@ -41,8 +43,8 @@ class Request:
 
     slave_id: int
     function: FunctionCode
-    address: int  # adresse de départ, base 0 (protocole)
-    count: int = 1  # nombre de registres / bobines à lire ou écrire
+    address: int  # adresse de départ, base 0 (protocole) ; FC43 : code de lecture (1 = basique)
+    count: int = 1  # nombre de registres / bobines ; FC43 : identifiant d'objet de départ
     values: tuple[int, ...] = ()  # valeurs à écrire (FC 05/06/15/16), vide en lecture
 
 

@@ -25,9 +25,10 @@ class RtuMaster:
     def settings(self):
         return self.link.settings
 
-    def execute(self, req: Request) -> ExchangeRecord:
+    def execute(self, req: Request, timeout_ms: float | None = None) -> ExchangeRecord:
         """Émet la requête, attend la réponse, décode. Ne lève que ``ValueError``
-        (requête hors bornes) ; toute autre issue est encodée dans le statut."""
+        (requête hors bornes) ; toute autre issue est encodée dans le statut.
+        ``timeout_ms`` remplace le délai de la liaison (scan, tests de diagnostic)."""
         adu = build_adu(req)  # ValueError si hors bornes : à la charge de l'appelant
         self._seq += 1
         seq = self._seq
@@ -43,8 +44,9 @@ class RtuMaster:
                 seq, timestamp, req, settings, tx, None, ExchangeStatus.TRANSPORT_ERROR, None, error_message=str(exc)
             )
 
+        timeout = settings.response_timeout_ms if timeout_ms is None else timeout_ms
         try:
-            rx = self.link.receive(settings.response_timeout_ms)
+            rx = self.link.receive(timeout)
         except TransportError as exc:
             return ExchangeRecord(
                 seq, timestamp, req, settings, tx, None, ExchangeStatus.TRANSPORT_ERROR, None, error_message=str(exc)
@@ -60,7 +62,7 @@ class RtuMaster:
                 None,
                 ExchangeStatus.TIMEOUT,
                 None,
-                error_message=f"Timeout ({settings.response_timeout_ms:g} ms)",
+                error_message=f"Timeout ({timeout:g} ms)",
             )
 
         response_time_ms = (rx.t_first_ns - tx.t_last_ns) / 1_000_000

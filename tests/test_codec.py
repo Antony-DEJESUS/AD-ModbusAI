@@ -97,3 +97,67 @@ def test_bits():
     assert parse_bits(["1", "0", "on", ""]) == [1, 0, 1, 0]
     with pytest.raises(ValueError):
         parse_bits(["2"])
+
+
+def test_order_labels():
+    from modbusai.modbus.codec import order_label
+
+    assert order_label(2, False, False) == "ABCD"
+    assert order_label(2, False, True) == "CDAB"
+    assert order_label(2, True, False) == "BADC"
+    assert order_label(2, True, True) == "DCBA"
+    assert order_label(4, False, False) == "ABCDEFGH"
+    assert order_label(4, False, True) == "GHEFCDAB"
+    assert order_label(4, True, False) == "BADCFEHG"
+    assert order_label(4, True, True) == "HGFEDCBA"
+    assert DisplayOptions(mode=DisplayMode.WORD64, word_swap=True).order_label == "GHEFCDAB"
+    assert DisplayOptions(mode=DisplayMode.WORD16, word_swap=True).order_label == ""
+
+
+def test_word64_and_float64():
+    # 3.14 en float64 big-endian : 40 09 1E B8 51 EB 85 1F
+    regs = [0x4009, 0x1EB8, 0x51EB, 0x851F]
+    rows = format_registers(regs, 100, DisplayOptions(mode=DisplayMode.FLOAT64))
+    assert rows[0].label == "100-103"
+    assert rows[0].text == "3.14"
+    rows = format_registers(regs, 0, DisplayOptions(mode=DisplayMode.WORD64, radix=Radix.HEX))
+    assert rows[0].text == "40091EB851EB851F"
+    rows = format_registers([0xFFFF, 0xFFFF, 0xFFFF, 0xFFFE], 0, DisplayOptions(mode=DisplayMode.WORD64))
+    assert rows[0].text == "-2"
+    rows = format_registers([0xFFFF, 0xFFFF, 0xFFFF, 0xFFFE], 0, DisplayOptions(mode=DisplayMode.WORD64, signed=False))
+    assert rows[0].text == str(2**64 - 2)
+    # ordre inversé : mots poids faible en premier
+    swapped = format_registers(regs[::-1], 0, DisplayOptions(mode=DisplayMode.FLOAT64, word_swap=True))
+    assert swapped[0].text == "3.14"
+    # 6 registres en 64 bits : une valeur + deux orphelins 16 bits
+    rows = format_registers(regs + [7, 8], 0, DisplayOptions(mode=DisplayMode.WORD64))
+    assert [r.label for r in rows] == ["0-3", "4", "5"]
+    assert [r.text for r in rows][1:] == ["7", "8"]
+
+
+def test_parse_rows_roundtrip_64bit_all_orders():
+    regs = [0x4009, 0x1EB8, 0x51EB, 0x851F, 0x8000, 0x0001, 0x0002, 0x0003, 0xABCD]
+    for mode in (DisplayMode.WORD64, DisplayMode.FLOAT64):
+        for radix in Radix:
+            for signed in (True, False):
+                for bs in (False, True):
+                    for ws in (False, True):
+                        opts = DisplayOptions(mode, radix, signed, bs, ws)
+                        rows = format_registers(regs, 0, opts)
+                        assert parse_rows([r.text for r in rows], len(regs), opts) == regs, (
+                            mode,
+                            radix,
+                            signed,
+                            bs,
+                            ws,
+                        )
+
+
+def test_float64_precision_roundtrip():
+    import math
+    import struct
+
+    regs = list(struct.unpack(">4H", struct.pack(">d", math.pi)))
+    rows = format_registers(regs, 0, DisplayOptions(mode=DisplayMode.FLOAT64))
+    assert float(rows[0].text) == math.pi
+    assert parse_rows([rows[0].text], 4, DisplayOptions(mode=DisplayMode.FLOAT64)) == regs

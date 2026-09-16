@@ -120,3 +120,24 @@ def test_parse_bad_response():
 def test_validate_rejects(req):
     with pytest.raises(ValueError):
         build_adu(req)
+
+
+def test_identification_functions():
+    req = Request(1, FC.READ_DEVICE_ID, 1, 0)
+    assert build_pdu(req) == bytes.fromhex("2B0E0100")
+    assert expected_response_length(req) is None
+    # Réponse basique : MEI, code lecture, conformité, plus de suit, prochain objet, nb objets, objets
+    body = bytes.fromhex("0E 01 01 00 00 02 00 06") + b"Vendor" + bytes.fromhex("01 02") + b"PC"
+    resp = append_crc(bytes([1, 0x2B]) + body)
+    assert bytes(parse_response(req, resp)) == body
+    with pytest.raises(BadResponse):
+        parse_response(req, append_crc(bytes.fromhex("012B0D0101000000")))
+
+    req17 = Request(1, FC.REPORT_SLAVE_ID, 0)
+    assert build_pdu(req17) == b"\x11"
+    resp17 = append_crc(bytes.fromhex("0111 03 42 FF 07".replace(" ", "")))
+    assert parse_response(req17, resp17) == (0x42, 0xFF, 0x07)
+    with pytest.raises(BadResponse):
+        parse_response(req17, append_crc(bytes.fromhex("0111054200")))
+    with pytest.raises(ValueError):
+        build_pdu(Request(1, FC.READ_DEVICE_ID, 5, 0))

@@ -24,15 +24,34 @@ class DisplayMode(enum.Enum):
     BYTE8 = "OCTET 8 bits"
     WORD16 = "MOT 16 bits"
     WORD32 = "MOT 32 bits"
-    FLOAT32 = "MOT FLOTTANT"
+    FLOAT32 = "FLOTTANT 32 bits"
+    WORD64 = "MOT 64 bits"
+    FLOAT64 = "FLOTTANT 64 bits"
 
     @property
-    def is_32bit(self) -> bool:
-        return self in (DisplayMode.WORD32, DisplayMode.FLOAT32)
+    def words(self) -> int:
+        """Nombre de registres 16 bits par valeur affichée."""
+        if self in (DisplayMode.WORD32, DisplayMode.FLOAT32):
+            return 2
+        if self in (DisplayMode.WORD64, DisplayMode.FLOAT64):
+            return 4
+        return 1
+
+    @property
+    def is_multiword(self) -> bool:
+        return self.words > 1
+
+    @property
+    def is_float(self) -> bool:
+        return self in (DisplayMode.FLOAT32, DisplayMode.FLOAT64)
 
 
 class WordOrder(enum.Enum):
-    """Ordre des octets d'un 32 bits sur deux registres (A = octet de poids fort)."""
+    """Ordre des octets d'une valeur multi-registres (A = octet de poids fort).
+
+    Les noms sont ceux du cas 32 bits ; en 64 bits la même combinaison donne
+    ABCDEFGH, GHEFCDAB, BADCFEHG ou HGFEDCBA (voir ``order_label``).
+    """
 
     ABCD = (False, False)  # normal : reg0 = AB, reg1 = CD
     CDAB = (False, True)  # inversion de mots
@@ -52,6 +71,18 @@ class WordOrder(enum.Enum):
         return cls((byte_swap, word_swap))
 
 
+def order_label(words: int, byte_swap: bool, word_swap: bool) -> str:
+    """Ordre des octets tel qu'ils apparaissent dans les registres, ex. ``CDAB``.
+    ``words`` = nombre de registres (2 -> 4 lettres, 4 -> 8 lettres)."""
+    letters = "ABCDEFGH"[: 2 * words]
+    pairs = [letters[i : i + 2] for i in range(0, len(letters), 2)]
+    if word_swap:
+        pairs.reverse()
+    if byte_swap:
+        pairs = [p[::-1] for p in pairs]
+    return "".join(pairs)
+
+
 @dataclass(frozen=True, slots=True)
 class DisplayOptions:
     mode: DisplayMode = DisplayMode.WORD16
@@ -62,7 +93,11 @@ class DisplayOptions:
 
     @property
     def word_order(self) -> WordOrder:
-        return WordOrder.from_swaps(self.byte_swap, self.word_swap and self.mode.is_32bit)
+        return WordOrder.from_swaps(self.byte_swap, self.word_swap and self.mode.is_multiword)
+
+    @property
+    def order_label(self) -> str:
+        return order_label(self.mode.words, self.byte_swap, self.word_swap) if self.mode.is_multiword else ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,20 +125,33 @@ def to_unsigned(value: int, bits: int) -> int:
     return value & ((1 << bits) - 1)
 
 
-def regs_to_u32(hi: int, lo: int, order: WordOrder) -> int:
-    if order.byte_swap:
-        hi, lo = swap_bytes(hi), swap_bytes(lo)
+def regs_to_uint(regs: Sequence[int], order: WordOrder) -> int:
+    """Assemble N registres en entier non signé de 16·N bits.
+    ``word_swap`` inverse l'ordre des registres (poids faible en premier)."""
+    rs = [swap_bytes(r) if order.byte_swap else r for r in regs]
     if order.word_swap:
-        hi, lo = lo, hi
-    return (hi << 16) | lo
+        rs.reverse()
+    value = 0
+    for r in rs:
+        value = (value << 16) | r
+    return value
+
+
+def uint_to_regs(value: int, words: int, order: WordOrder) -> tuple[int, ...]:
+    rs = [(value >> (16 * (words - 1 - i))) & 0xFFFF for i in range(words)]
+    if order.word_swap:
+        rs.reverse()
+    if order.byte_swap:
+        rs = [swap_bytes(r) for r in rs]
+    return tuple(rs)
+
+
+def regs_to_u32(hi: int, lo: int, order: WordOrder) -> int:
+    return regs_to_uint((hi, lo), order)
 
 
 def u32_to_regs(value: int, order: WordOrder) -> tuple[int, int]:
-    hi, lo = (value >> 16) & 0xFFFF, value & 0xFFFF
-    if order.word_swap:
-        hi, lo = lo, hi
-    if order.byte_swap:
-        hi, lo = swap_bytes(hi), swap_bytes(lo)
+    hi, lo = uint_to_regs(value, 2, order)
     return hi, lo
 
 
@@ -133,42 +181,53 @@ def parse_int(text: str, bits: int, radix: Radix, signed: bool) -> int:
     return to_unsigned(value, bits)
 
 
-def format_float(value: float) -> str:
-    """Représentation la plus courte qui redonne exactement le même float32
-    (3.14 s'affiche « 3.14 », pas « 3.1400001 », et la ressaisie est sans perte)."""
+def format_float(value: float, fmt: str = ">f") -> str:
+    """Représentation la plus courte qui redonne exactement le même flottant
+    (3.14 s'affiche « 3.14 », pas « 3.1400001 », et la ressaisie est sans perte).
+    ``fmt`` : ``">f"`` pour 32 bits, ``">d"`` pour 64 bits."""
     if value != value or value in (float("inf"), float("-inf")):
         return repr(value)
-    packed = struct.pack(">f", value)
-    for precision in range(1, 10):
+    packed = struct.pack(fmt, value)
+    max_precision = 9 if fmt == ">f" else 17
+    for precision in range(1, max_precision + 1):
         text = f"{value:.{precision}g}"
-        if struct.pack(">f", float(text)) == packed:
+        if struct.pack(fmt, float(text)) == packed:
             return text
-    return f"{value:.9g}"
+    return f"{value:.{max_precision}g}"
+
+
+def _float_fmt(mode: DisplayMode) -> str:
+    return ">d" if mode is DisplayMode.FLOAT64 else ">f"
 
 
 # ------------------------------------------------------------ registres -> grille
 def format_registers(regs: Sequence[int], start_address: int, opts: DisplayOptions) -> list[DisplayRow]:
     rows: list[DisplayRow] = []
     mode = opts.mode
-    if mode.is_32bit:
+    if mode.is_multiword:
         order = opts.word_order
+        words = mode.words
+        bits = 16 * words
         i = 0
         while i < len(regs):
             addr = start_address + i
-            if i + 1 >= len(regs):  # registre orphelin : affiché en 16 bits
-                r = swap_bytes(regs[i]) if opts.byte_swap else regs[i]
-                rows.append(DisplayRow(str(addr), format_int(r, 16, opts.radix, opts.signed), addr, 1))
+            if i + words > len(regs):  # registres orphelins : affichés en 16 bits
+                for j in range(i, len(regs)):
+                    r = swap_bytes(regs[j]) if opts.byte_swap else regs[j]
+                    a = start_address + j
+                    rows.append(DisplayRow(str(a), format_int(r, 16, opts.radix, opts.signed), a, 1))
                 break
-            u32 = regs_to_u32(regs[i], regs[i + 1], order)
-            if mode is DisplayMode.FLOAT32:
+            value = regs_to_uint(regs[i : i + words], order)
+            if mode.is_float:
                 if opts.radix is Radix.DEC:
-                    text = format_float(struct.unpack(">f", u32.to_bytes(4, "big"))[0])
+                    fmt = _float_fmt(mode)
+                    text = format_float(struct.unpack(fmt, value.to_bytes(bits // 8, "big"))[0], fmt)
                 else:
-                    text = format_int(u32, 32, opts.radix, False)
+                    text = format_int(value, bits, opts.radix, False)
             else:
-                text = format_int(u32, 32, opts.radix, opts.signed)
-            rows.append(DisplayRow(f"{addr}-{addr + 1}", text, addr, 2))
-            i += 2
+                text = format_int(value, bits, opts.radix, opts.signed)
+            rows.append(DisplayRow(f"{addr}-{addr + words - 1}", text, addr, words))
+            i += words
         return rows
 
     for i, reg in enumerate(regs):
@@ -198,20 +257,23 @@ def parse_rows(texts: Sequence[str], count: int, opts: DisplayOptions) -> list[i
     """
     mode = opts.mode
     regs: list[int] = []
-    if mode.is_32bit:
+    if mode.is_multiword:
         order = opts.word_order
-        expected = (count + 1) // 2
-        _check_rows(len(texts), expected)
+        words = mode.words
+        bits = 16 * words
+        full, orphans = divmod(count, words)
+        _check_rows(len(texts), full + orphans)
         for i, text in enumerate(texts):
-            if 2 * i + 1 >= count:  # registre orphelin
+            if i >= full:  # registre orphelin saisi en 16 bits
                 r = parse_int(text, 16, opts.radix, opts.signed)
                 regs.append(swap_bytes(r) if opts.byte_swap else r)
-                break
-            if mode is DisplayMode.FLOAT32 and opts.radix is Radix.DEC:
-                u32 = int.from_bytes(struct.pack(">f", float(text.strip().replace(",", "."))), "big")
+                continue
+            if mode.is_float and opts.radix is Radix.DEC:
+                fmt = _float_fmt(mode)
+                value = int.from_bytes(struct.pack(fmt, float(text.strip().replace(",", "."))), "big")
             else:
-                u32 = parse_int(text, 32, opts.radix, opts.signed and mode is DisplayMode.WORD32)
-            regs.extend(u32_to_regs(u32, order))
+                value = parse_int(text, bits, opts.radix, opts.signed and not mode.is_float)
+            regs.extend(uint_to_regs(value, words, order))
         return regs
 
     if mode is DisplayMode.BYTE8:

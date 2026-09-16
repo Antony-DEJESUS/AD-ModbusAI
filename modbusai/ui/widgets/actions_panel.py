@@ -110,9 +110,9 @@ class ActionsPanel(QFrame):
 
     def _on_display_changed(self) -> None:
         mode: DisplayMode = self.display_mode.currentData()
-        self.word_swap.setEnabled(mode.is_32bit)
+        self.word_swap.setEnabled(mode.is_multiword)
         opts = self.display_options(Radix.DEC)
-        self.order_label.setText(f"Ordre 32 bits : {opts.word_order.name}" if mode.is_32bit else "")
+        self.order_label.setText(f"Ordre {16 * mode.words} bits : {opts.order_label}" if mode.is_multiword else "")
         self.display_changed.emit()
 
     def _ask_period(self) -> None:
