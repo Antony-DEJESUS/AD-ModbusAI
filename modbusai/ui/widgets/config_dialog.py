@@ -149,7 +149,7 @@ class ConfigDialog(QDialog):
             port=port,
             baudrate=baud,
             bytesize=self.databits.currentData(),
-            parity=self.parity.currentData(),
+            parity=Parity(self.parity.currentData()),
             stopbits=self.stopbits.currentData(),
             response_timeout_ms=float(self.timeout.value()),
             inter_frame_delay_ms=inter if inter > 0 else None,

@@ -64,6 +64,14 @@ class SerialSettings:
     rts_toggle: bool = False  # pilotage RTS pour les adaptateurs RS-485 sans auto-direction
     dtr: bool = False
 
+    def __post_init__(self) -> None:
+        # Qt (QComboBox.currentData, QSettings) renvoie un StrEnum comme simple
+        # chaîne : on normalise pour que ``parity is Parity.NONE`` reste fiable.
+        if not isinstance(self.parity, Parity):
+            object.__setattr__(self, "parity", Parity(self.parity))
+        object.__setattr__(self, "stopbits", float(self.stopbits))
+        object.__setattr__(self, "bytesize", int(self.bytesize))
+
     @property
     def bits_per_char(self) -> float:
         """Start + données + parité éventuelle + stop."""

@@ -331,7 +331,7 @@ class MainWindow(QMainWindow):
         qs.setValue("serial/port", s.port)
         qs.setValue("serial/baudrate", s.baudrate)
         qs.setValue("serial/bytesize", s.bytesize)
-        qs.setValue("serial/parity", s.parity.value)
+        qs.setValue("serial/parity", str(s.parity.value))
         qs.setValue("serial/stopbits", s.stopbits)
         qs.setValue("serial/timeout_ms", s.response_timeout_ms)
         qs.setValue("serial/inter_frame_delay_ms", "" if s.inter_frame_delay_ms is None else s.inter_frame_delay_ms)
