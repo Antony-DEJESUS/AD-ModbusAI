@@ -117,11 +117,43 @@ class SerialSettings:
             return self.inter_frame_delay_ms
         return max(self.t35_ms, USB_GAP_FLOOR_MS)
 
+    @property
+    def is_tcp(self) -> bool:
+        return False
+
     def summary(self) -> str:
         """Ex. : ``COM4 : 19200,8,None,One`` (barre de titre, façon Modbus Doctor)."""
         parity = {Parity.NONE: "None", Parity.EVEN: "Even", Parity.ODD: "Odd"}[self.parity]
         stop = {1.0: "One", 1.5: "OnePointFive", 2.0: "Two"}.get(self.stopbits, str(self.stopbits))
         return f"{self.port} : {self.baudrate},{self.bytesize},{parity},{stop}"
+
+
+@dataclass(frozen=True, slots=True)
+class TcpSettings:
+    """Paramètres d'une liaison Modbus TCP. Même rôle que ``SerialSettings``
+    pour la liaison série ; les deux exposent ``summary()`` et
+    ``response_timeout_ms`` pour que le maître et l'analyse les traitent
+    indifféremment."""
+
+    host: str
+    port: int = 502
+    response_timeout_ms: float = 1000.0
+    connect_timeout_ms: float = 3000.0
+
+    @property
+    def is_tcp(self) -> bool:
+        return True
+
+    def summary(self) -> str:
+        """Ex. : ``192.168.1.10:502``."""
+        return f"{self.host}:{self.port}" if self.host else "Aucun hôte"
+
+
+LinkSettings = SerialSettings | TcpSettings
+
+
+def is_tcp(settings: LinkSettings | None) -> bool:
+    return isinstance(settings, TcpSettings)
 
 
 @dataclass(frozen=True, slots=True)

@@ -132,7 +132,7 @@ def expected_response_length(req: Request) -> int | None:
 
 
 def parse_response(req: Request, adu: bytes) -> tuple[int, ...]:
-    """Décode la réponse à ``req``.
+    """Décode une réponse RTU (esclave + PDU + CRC) à ``req``.
 
     Renvoie les valeurs lues (registres 16 bits ou bits 0/1) ; tuple vide pour
     une écriture acquittée ; octets bruts du corps pour FC17 et FC43 (décodés
@@ -142,8 +142,16 @@ def parse_response(req: Request, adu: bytes) -> tuple[int, ...]:
     if len(adu) < 5 or not check_crc(adu):
         # Une réponse d'exception fait 5 octets ; en dessous, le CRC ne peut être bon.
         raise CrcError(adu)
-    slave, fc = adu[0], adu[1]
-    body = adu[2:-2]
+    return parse_response_pdu(req, adu[0], adu[1:-2])
+
+
+def parse_response_pdu(req: Request, slave: int, pdu: bytes) -> tuple[int, ...]:
+    """Décode une PDU de réponse (code fonction + données) déjà extraite de son
+    enveloppe (CRC en RTU, MBAP en TCP). Lève ``ModbusException`` ou ``BadResponse``."""
+    if len(pdu) < 1:
+        raise BadResponse("Réponse vide")
+    fc = pdu[0]
+    body = pdu[1:]
     if slave != req.slave_id:
         raise BadResponse(f"Réponse de l'esclave {slave} au lieu de {req.slave_id}")
     if fc == (req.function | 0x80):

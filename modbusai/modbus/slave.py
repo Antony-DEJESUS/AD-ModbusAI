@@ -127,48 +127,62 @@ class SlaveHandler:
 
     # ---------------------------------------------------------------- API
     def handle(self, adu: bytes) -> HandledRequest:
+        """Trame RTU complète (esclave + PDU + CRC) -> réponse RTU ou None."""
         c = self.counters
         if len(adu) < 4 or not check_crc(adu):
             c.ignored += 1
             return HandledRequest(adu, None, None, None, "invalide", "CRC invalide ou trame trop courte")
-        slave, fc = adu[0], adu[1]
-        body = adu[2:-2]
+        slave = adu[0]
+        result = self.handle_pdu(slave, adu[1:-2])
+        resp = None
+        if result.response is not None:
+            resp = append_crc(bytes([slave]) + result.response)
+            if result.kind == "corrompue":
+                resp = resp[:-1] + bytes([resp[-1] ^ 0xFF])
+        return HandledRequest(adu, resp, result.slave_id, result.function, result.kind, result.detail)
+
+    def handle_pdu(self, slave: int, pdu: bytes) -> HandledRequest:
+        """Cœur commun RTU / TCP : PDU de requête -> PDU de réponse (sans enveloppe).
+        Pour ``kind == "corrompue"``, c'est l'enveloppe qui applique l'altération."""
+        c = self.counters
+        if not pdu:
+            c.ignored += 1
+            return HandledRequest(pdu, None, slave, None, "invalide", "PDU vide")
+        fc = pdu[0]
+        body = pdu[1:]
         broadcast = slave == 0
         if not broadcast and slave not in self.config.slave_ids:
             c.ignored += 1
-            return HandledRequest(adu, None, slave, fc, "ignorée", "adresse non servie")
+            return HandledRequest(pdu, None, slave, fc, "ignorée", "adresse non servie")
         try:
             function = FunctionCode(fc)
         except ValueError:
             c.requests += 1
-            return self._exception(adu, slave, fc, 0x01)
+            return self._exception(pdu, slave, fc, 0x01)
         c.requests += 1
         try:
-            pdu = self._process(function, body)
+            resp = self._process(function, body)
         except _Exc as exc:
-            return self._exception(adu, slave, fc, exc.code)
-        if pdu is None:
-            return HandledRequest(adu, None, slave, fc, "ignorée", "requête mal formée")
+            return self._exception(pdu, slave, fc, exc.code)
+        if resp is None:
+            return HandledRequest(pdu, None, slave, fc, "ignorée", "requête mal formée")
         if broadcast:
-            return HandledRequest(adu, None, 0, fc, "broadcast", "écriture diffusée, sans réponse")
+            return HandledRequest(pdu, None, 0, fc, "broadcast", "écriture diffusée, sans réponse")
         if self.config.drop_ratio > 0 and self._rng.random() < self.config.drop_ratio:
             c.dropped += 1
-            return HandledRequest(adu, None, slave, fc, "perdue", "réponse volontairement non émise")
-        resp = append_crc(bytes([slave]) + pdu)
+            return HandledRequest(pdu, None, slave, fc, "perdue", "réponse volontairement non émise")
         if self.config.corrupt_ratio > 0 and self._rng.random() < self.config.corrupt_ratio:
             c.corrupted += 1
-            resp = resp[:-1] + bytes([resp[-1] ^ 0xFF])
-            return HandledRequest(adu, resp, slave, fc, "corrompue", "CRC volontairement faux")
+            return HandledRequest(pdu, resp, slave, fc, "corrompue", "CRC volontairement faux")
         c.responses += 1
-        return HandledRequest(adu, resp, slave, fc, "réponse")
+        return HandledRequest(pdu, resp, slave, fc, "réponse")
 
     # ------------------------------------------------------------ interne
-    def _exception(self, adu: bytes, slave: int, fc: int, code: int) -> HandledRequest:
+    def _exception(self, pdu: bytes, slave: int, fc: int, code: int) -> HandledRequest:
         self.counters.exceptions += 1
         if slave == 0:
-            return HandledRequest(adu, None, 0, fc, "broadcast", f"exception {code:02X} non émise (diffusion)")
-        resp = append_crc(bytes([slave, fc | 0x80, code]))
-        return HandledRequest(adu, resp, slave, fc, "exception", f"exception {code:02X}")
+            return HandledRequest(pdu, None, 0, fc, "broadcast", f"exception {code:02X} non émise (diffusion)")
+        return HandledRequest(pdu, bytes([fc | 0x80, code]), slave, fc, "exception", f"exception {code:02X}")
 
     def _check_range(self, table: Table, address: int, count: int) -> None:
         if count < 1 or address + count > self.config.limits.get(table, TABLE_SIZE):
