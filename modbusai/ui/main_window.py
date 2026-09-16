@@ -1,42 +1,46 @@
-"""Fenêtre principale : disposition Modbus Doctor, câblage des widgets et du worker.
+"""Fenêtre principale : bandeau de connexion, thème, onglets, arbitrage du port série.
 
-Aucune logique Modbus ici : la fenêtre compose des ``Request`` à partir des
-champs, envoie au worker, et présente les ``ExchangeRecord`` reçus.
+Un seul rôle occupe le port à la fois : maître (onglets Maître, Scan,
+Diagnostic), espion ou serveur esclave. La fenêtre possède le worker maître
+et lance / arrête les threads espion et esclave à la demande des pages.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings, Qt, QThread, QTimer, Signal
+import enum
+
+from PySide6.QtCore import QSettings, QThread, QTimer, Signal
 from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import (
-    QApplication,
-    QHBoxLayout,
-    QLabel,
-    QMainWindow,
-    QMessageBox,
-    QSplitter,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QMessageBox, QTabWidget, QVBoxLayout, QWidget
 
 from modbusai import APP_TITLE
-from modbusai.modbus import codec
-from modbusai.modbus.records import ExchangeRecord, ExchangeStatus, Request
+from modbusai.analysis.diagnostic import Hypothesis, SuggestedTest
+from modbusai.analysis.session import SessionStore
+from modbusai.modbus.records import ExchangeRecord, ExchangeStatus
+from modbusai.modbus.slave import DataStore, SlaveConfig
 from modbusai.transport.records import Parity, SerialSettings
-from modbusai.ui.widgets.actions_panel import ActionsPanel
+from modbusai.ui.controllers import CampaignController, ScanController, probe_request_for
+from modbusai.ui.pages.diagnostic_page import DiagnosticPage
+from modbusai.ui.pages.master_page import MasterPage
+from modbusai.ui.pages.scan_page import ScanPage
+from modbusai.ui.pages.slave_page import SlavePage
+from modbusai.ui.pages.sniffer_page import SnifferPage
+from modbusai.ui.theme import THEMES, apply_theme, system_theme
 from modbusai.ui.widgets.config_dialog import ConfigDialog
 from modbusai.ui.widgets.connection_bar import ConnectionBar
-from modbusai.ui.widgets.exchange_panel import ExchangePanel
-from modbusai.ui.widgets.log_console import LogPanel
-from modbusai.ui.widgets.register_grid import RegisterGrid
-from modbusai.ui.widgets.request_bar import RequestBar
-from modbusai.ui.workers import ModbusWorker
+from modbusai.ui.workers import ExecuteJob, ModbusWorker, SlaveWorker, SnifferWorker
 
 RECONNECT_DELAY_MS = 1500
 
 
+class Role(enum.Enum):
+    IDLE = "aucun"
+    MASTER = "maître"
+    SNIFFER = "espion"
+    SLAVE = "esclave"
+
+
 class MainWindow(QMainWindow):
-    # Commandes vers le worker (connexions en file : exécutées dans son thread)
     _cmd_open = Signal(object)
     _cmd_close = Signal()
     _cmd_execute = Signal(object)
@@ -44,52 +48,40 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(APP_TITLE)
-        self.resize(1000, 640)
+        self.resize(1180, 760)
 
         self._settings = self._load_settings()
+        self._role = Role.IDLE
         self._connected = False
-        self._busy = False
-        self._last_values: tuple[int, ...] | None = None  # dernière lecture réussie (brute)
-        self._last_start = 0
-        self._last_is_bits = False
+        self._manual_disconnect = False
         self._reconnect_pending = False
-        self._resume_cycle = False  # cycle interrompu par une panne de liaison, à reprendre après reconnexion
+        self._sniffer: SnifferWorker | None = None
+        self._slave: SlaveWorker | None = None
+        self.session = SessionStore()
+        self.store = DataStore()
 
         # ------------------------------------------------------------ widgets
         self.connection_bar = ConnectionBar()
-        self.request_bar = RequestBar()
-        self.actions = ActionsPanel()
-        self.grid = RegisterGrid()
-        self.exchange = ExchangePanel()
-        self.log_panel = LogPanel()
-        self.console = self.log_panel.console
+        self.master_page = MasterPage()
+        self.sniffer_page = SnifferPage(self.session)
+        self.scan_page = ScanPage()
+        self.diagnostic_page = DiagnosticPage(self.session)
+        self.slave_page = SlavePage(self.store)
+        self.tabs = QTabWidget()
+        self.tabs.addTab(self.master_page, "MAÎTRE")
+        self.tabs.addTab(self.sniffer_page, "ESPION")
+        self.tabs.addTab(self.scan_page, "SCAN RÉSEAU")
+        self.tabs.addTab(self.diagnostic_page, "DIAGNOSTIC")
+        self.tabs.addTab(self.slave_page, "SERVEUR ESCLAVE")
         self.status_label = QLabel("Status : déconnecté")
-
-        middle = QSplitter(Qt.Orientation.Horizontal)
-        middle.addWidget(self.actions)
-        middle.addWidget(self.grid)
-        middle.addWidget(self.exchange)
-        middle.setStretchFactor(1, 2)
-        middle.setStretchFactor(2, 1)
-        middle.setChildrenCollapsible(False)
-
-        vertical = QSplitter(Qt.Orientation.Vertical)
-        vertical.addWidget(middle)
-        vertical.addWidget(self.log_panel)
-        vertical.setStretchFactor(0, 3)
-        vertical.setStretchFactor(1, 1)
-        vertical.setChildrenCollapsible(False)
 
         central = QWidget()
         layout = QVBoxLayout(central)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
         layout.addWidget(self.connection_bar)
-        layout.addWidget(self.request_bar)
-        layout.addWidget(vertical, 1)
-        status_row = QHBoxLayout()
-        status_row.addWidget(self.status_label)
-        layout.addLayout(status_row)
+        layout.addWidget(self.tabs, 1)
+        layout.addWidget(self.status_label)
         self.setCentralWidget(central)
 
         # ------------------------------------------------------------- worker
@@ -106,77 +98,142 @@ class MainWindow(QMainWindow):
         self._worker.request_failed.connect(self._on_request_failed)
         self._thread.start()
 
-        self._cycle_timer = QTimer(self)
-        self._cycle_timer.timeout.connect(self._cycle_tick)
+        self.scan_ctl = ScanController(self.session, self)
+        self.campaign_ctl = CampaignController(self.session, self)
+        for ctl in (self.scan_ctl, self.campaign_ctl):
+            ctl.execute_requested.connect(self._cmd_execute)
+            ctl.reopen_requested.connect(self._reopen_for_controller)
+            self._worker.connected.connect(ctl.on_connected)
+            self._worker.link_error.connect(ctl.on_link_error)
+            self._worker.record_ready.connect(ctl.on_record)
+            self._worker.request_failed.connect(ctl.on_request_failed)
 
         # ------------------------------------------------------------ signaux
         self.connection_bar.configure_requested.connect(self._configure)
         self.connection_bar.connect_requested.connect(self._connect)
         self.connection_bar.disconnect_requested.connect(self._disconnect)
         self.connection_bar.quit_requested.connect(self.close)
-        self.request_bar.changed.connect(self._on_request_changed)
-        self.request_bar.radix_changed.connect(lambda _r: self._refresh_grid())
-        self.actions.read_requested.connect(self._read)
-        self.actions.write_requested.connect(self._write)
-        self.actions.stop_cycle_requested.connect(self._stop_cycle)
-        self.actions.display_changed.connect(self._refresh_grid)
-        self.actions.cyclic.toggled.connect(self._on_cyclic_toggled)
-        self.exchange.clear_requested.connect(self._clear)
-        self.log_panel.copied.connect(lambda n: self._set_status(f"Journal copié dans le presse-papiers ({n} lignes)"))
+        self.connection_bar.theme_toggled.connect(self._toggle_theme)
+
+        self.master_page.execute_requested.connect(self._cmd_execute)
+        self.master_page.status_message.connect(self._set_status)
+        self.master_page.link_lost.connect(self._on_link_lost)
+
+        self.sniffer_page.start_requested.connect(self._start_sniffer)
+        self.sniffer_page.stop_requested.connect(self._stop_sniffer)
+        self.sniffer_page.status_message.connect(self._set_status)
+
+        self.scan_page.start_requested.connect(self._start_scan)
+        self.scan_page.cancel_requested.connect(self.scan_ctl.cancel)
+        self.scan_page.status_message.connect(self._set_status)
+        self.scan_ctl.progress.connect(self.scan_page.on_progress)
+        self.scan_ctl.result_ready.connect(self.scan_page.on_result)
+        self.scan_ctl.finished.connect(self._on_scan_finished)
+
+        self.diagnostic_page.run_test_requested.connect(self._start_campaign)
+        self.diagnostic_page.cancel_test_requested.connect(self.campaign_ctl.cancel)
+        self.diagnostic_page.status_message.connect(self._set_status)
+        self.campaign_ctl.progress.connect(self.diagnostic_page.on_test_progress)
+        self.campaign_ctl.finished.connect(self._on_campaign_finished)
+
+        self.slave_page.start_requested.connect(self._start_slave)
+        self.slave_page.stop_requested.connect(self._stop_slave)
+        self.slave_page.status_message.connect(self._set_status)
+
+        self.tabs.currentChanged.connect(lambda _i: self._update_availability())
 
         self.connection_bar.show_settings(self._settings)
-        self._on_request_changed()
+        self.diagnostic_page.set_settings(self._settings)
+        self._apply_saved_theme()
+        self._update_availability()
 
-    # ================================================================ liaison
+    # ================================================================ thème
+    def _apply_saved_theme(self) -> None:
+        app = QApplication.instance()
+        saved = str(QSettings().value("ui/theme", "")) or system_theme(app)
+        self._theme = apply_theme(app, saved)
+        self.connection_bar.set_theme(self._theme)
+
+    def _toggle_theme(self) -> None:
+        app = QApplication.instance()
+        nxt = THEMES[(THEMES.index(self._theme) + 1) % len(THEMES)]
+        self._theme = apply_theme(app, nxt)
+        self.connection_bar.set_theme(self._theme)
+        QSettings().setValue("ui/theme", self._theme)
+
+    # ============================================================== liaison
     def _configure(self) -> None:
         dlg = ConfigDialog(self._settings, self)
         if dlg.exec():
             self._settings = dlg.settings()
             self.connection_bar.show_settings(self._settings)
+            self.diagnostic_page.set_settings(self._settings)
             self._save_settings()
 
     def _connect(self) -> None:
         if not self._settings.port:
             QMessageBox.warning(self, APP_TITLE, "Choisissez un port dans CONFIGURATION.")
             return
+        if self._role in (Role.SNIFFER, Role.SLAVE):
+            self._set_status("Arrêtez d'abord l'espion ou le serveur esclave : le port est occupé.")
+            return
+        self._manual_disconnect = False
         self._set_status(f"Ouverture de {self._settings.port}…")
         self._cmd_open.emit(self._settings)
 
     def _disconnect(self) -> None:
+        self._manual_disconnect = True
         self._reconnect_pending = False
-        self._resume_cycle = False
-        self._stop_cycle()
+        self.scan_ctl.cancel()
+        self.campaign_ctl.cancel()
         self._cmd_close.emit()
+
+    def _reopen_for_controller(self, settings: SerialSettings) -> None:
+        self._cmd_open.emit(settings)
 
     def _on_connected(self, settings: SerialSettings) -> None:
         self._connected = True
+        self._role = Role.MASTER
         self._reconnect_pending = False
         self.connection_bar.set_connected(True)
+        self.connection_bar.show_settings(settings)
         self._set_status(
             f"Connecté : {settings.summary()} (timeout {settings.response_timeout_ms:g} ms, "
             f"silence fin de trame {settings.frame_gap_ms:.2f} ms)"
         )
-        self.console.log_info(f"Connexion {settings.summary()}")
-        if self._resume_cycle and self.actions.cyclic.isChecked():
-            self._start_cycle("Cycle repris")
-        self._resume_cycle = False
+        self.master_page.on_connected(settings.summary())
+        self._update_availability()
 
     def _on_disconnected(self) -> None:
         self._connected = False
-        self._busy = False
+        if self._role is Role.MASTER:
+            self._role = Role.IDLE
         self.connection_bar.set_connected(False)
+        self.connection_bar.show_settings(self._settings)
         self._set_status("Status : déconnecté")
-        self.console.log_info("Déconnexion")
+        self.master_page.on_disconnected(manual=self._manual_disconnect)
+        self._update_availability()
 
     def _on_link_error(self, message: str) -> None:
         self._connected = False
+        if self._role is Role.MASTER:
+            self._role = Role.IDLE
         self.connection_bar.set_connected(False)
         self._set_status(message)
-        self.console.log_error(message)
+        self.master_page.log_error(message)
+        self._update_availability()
+        self._maybe_schedule_reconnect()
+
+    def _on_link_lost(self) -> None:
+        """Erreur transport pendant un échange maître : fermer et tenter la reconnexion."""
+        self._connected = False
+        self._role = Role.IDLE
+        self.connection_bar.set_connected(False)
+        self._cmd_close.emit()
         self._maybe_schedule_reconnect()
 
     def _maybe_schedule_reconnect(self) -> None:
-        if not self.actions.auto_reconnect.isChecked() or self._reconnect_pending:
+        if not self.master_page.auto_reconnect or self._reconnect_pending or self._manual_disconnect:
             return
         self._reconnect_pending = True
         self._set_status(f"Reconnexion automatique dans {RECONNECT_DELAY_MS / 1000:.1f} s…")
@@ -186,138 +243,162 @@ class MainWindow(QMainWindow):
         if not self._reconnect_pending:
             return
         self._reconnect_pending = False
-        if not self._connected:
+        if not self._connected and self._role is Role.IDLE:
             self._cmd_open.emit(self._settings)
 
-    # =============================================================== requêtes
-    def _read(self) -> None:
-        if not self._ensure_connected():
+    # ============================================================== retours
+    def _on_record(self, rec: ExchangeRecord, job: ExecuteJob) -> None:
+        if job.tag == "maitre":
+            self.session.add_record(rec, source="maitre")
+            self.master_page.on_record(rec)
+        elif rec.status is ExchangeStatus.TRANSPORT_ERROR:
+            self._on_link_lost()
+
+    def _on_request_failed(self, message: str, job: ExecuteJob) -> None:
+        if job.tag == "maitre":
+            self.master_page.on_request_failed(message)
+
+    # ================================================================= scan
+    def _start_scan(self, _plan) -> None:
+        if not self._connected or self._role is not Role.MASTER:
+            self._set_status("Le scan utilise la liaison du maître : cliquez d'abord sur CONNEXION.")
             return
-        if self.actions.cyclic.isChecked() and not self._cycle_timer.isActive():
-            self._start_cycle("Cycle démarré")
-        self._send(self._read_request())
-
-    def _start_cycle(self, message: str) -> None:
-        self._cycle_timer.start(self.actions.cycle_period_ms)
-        self.actions.set_cycling(True)
-        self.console.log_info(f"{message} ({self.actions.cycle_period_ms} ms)")
-
-    def _write(self) -> None:
-        if not self._ensure_connected():
+        if self.campaign_ctl.active:
+            self._set_status("Un test de diagnostic est en cours.")
             return
-        rb = self.request_bar
-        reg_type = rb.current_type
-        count = rb.count.value()
-        fc = reg_type.write_function(count)
-        if fc is None:
-            self._on_request_failed("Ce type de donnée n'est pas inscriptible")
+        plan = self.scan_page.plan(self._settings)
+        self.scan_page.on_started(plan)
+        self.master_page.set_interactive(False)
+        self.scan_ctl.start(plan)
+        self._update_availability()
+
+    def _on_scan_finished(self, ok: bool) -> None:
+        self.scan_page.on_finished(ok)
+        self.master_page.set_interactive(True)
+        self.master_page.log_info(
+            f"Scan réseau {'terminé' if ok else 'interrompu'} : {len(self.scan_ctl.results)} adresse(s) testée(s)"
+        )
+        self._update_availability()
+
+    # ============================================================ campagnes
+    def _start_campaign(self, test: SuggestedTest, hyp: Hypothesis) -> None:
+        if not self._connected or self._role is not Role.MASTER or hyp.slave_id is None:
+            self._set_status("Les tests utilisent la liaison du maître : cliquez d'abord sur CONNEXION.")
             return
-        try:
-            texts = self.grid.value_texts()
-            if reg_type.is_bits:
-                values = codec.parse_bits(texts)
-                if len(values) != count:
-                    raise ValueError(f"{count} valeur(s) attendue(s), {len(values)} saisie(s)")
-            else:
-                values = codec.parse_rows(texts, count, self._display_options())
-        except ValueError as exc:
-            self._on_request_failed(f"Saisie invalide : {exc}")
+        if self.scan_ctl.active or self.campaign_ctl.active:
+            self._set_status("Un scan ou un test est déjà en cours.")
             return
-        self._send(Request(rb.slave.value(), fc, rb.register.value(), count, tuple(values)))
-
-    def _read_request(self) -> Request:
-        rb = self.request_bar
-        return Request(rb.slave.value(), rb.current_type.read_function, rb.register.value(), rb.count.value())
-
-    def _send(self, request: Request) -> None:
-        self._busy = True
-        self._cmd_execute.emit(request)
-
-    def _ensure_connected(self) -> bool:
-        if self._connected:
-            return True
-        self._on_request_failed("Liaison fermée : cliquez sur CONNEXION")
-        return False
-
-    def _cycle_tick(self) -> None:
-        if not self._connected:
+        baseline = self.diagnostic_page.stats_for(hyp.slave_id)
+        if baseline is None:
+            self._set_status("Pas de statistiques de référence pour cet esclave.")
             return
-        if self._busy:  # la requête précédente n'est pas terminée : on saute ce tick
+        request = probe_request_for(hyp.slave_id, self.master_page._read_request())
+        self.diagnostic_page.on_test_started(test, hyp)
+        self.master_page.set_interactive(False)
+        self.campaign_ctl.start(test, baseline, request, self._settings)
+        self._update_availability()
+
+    def _on_campaign_finished(self, comparison) -> None:
+        self.diagnostic_page.on_test_finished(comparison)
+        self.master_page.set_interactive(True)
+        self._update_availability()
+
+    # =============================================================== espion
+    def _start_sniffer(self) -> None:
+        if not self._settings.port:
+            QMessageBox.warning(self, APP_TITLE, "Choisissez un port dans CONFIGURATION.")
             return
-        self._send(self._read_request())
+        if self._role is Role.SLAVE:
+            self._set_status("Arrêtez le serveur esclave avant de lancer l'écoute.")
+            return
+        if self._role is Role.MASTER:
+            self._manual_disconnect = True
+            self._cmd_close.emit()
+        self._role = Role.SNIFFER
+        self._sniffer = SnifferWorker(self._settings, self)
+        s = self._sniffer
+        s.started_listening.connect(self.sniffer_page.on_started)
+        s.link_error.connect(self._on_passive_error)
+        s.frames_ready.connect(lambda frames: self.sniffer_page.on_frames(frames, s.decoder.counters))
+        s.transactions_ready.connect(self._on_transactions)
+        s.stopped.connect(self._on_sniffer_stopped)
+        s.start()
+        self._update_availability()
 
-    def _stop_cycle(self) -> None:
-        if self._cycle_timer.isActive():
-            self._cycle_timer.stop()
-            self.console.log_info("Cycle arrêté")
-        self.actions.set_cycling(False)
+    def _stop_sniffer(self) -> None:
+        if self._sniffer is not None:
+            self._sniffer.stop()
 
-    def _on_cyclic_toggled(self, checked: bool) -> None:
-        if not checked:
-            self._stop_cycle()
+    def _on_transactions(self, transactions) -> None:
+        for tr in transactions:
+            self.session.add_transaction(tr, self._settings)
+        self.sniffer_page.on_transactions(transactions)
 
-    # ================================================================ retours
-    def _on_record(self, rec: ExchangeRecord) -> None:
-        self._busy = False
-        self.console.log_record(rec)
-        self.exchange.show_record(rec)
-        if rec.ok:
-            if rec.values is not None and rec.request.function in (1, 2, 3, 4):
-                self._last_values = rec.values
-                self._last_start = rec.request.address
-                self._last_is_bits = rec.request.function in (1, 2)
-                self._refresh_grid()
-            self._set_status(f"Status : {rec.status.name}  -  {rec.response_time_ms:.1f} ms")
-        else:
-            self.grid.mark_stale(True)
-            self._set_status(f"Status : {rec.status.name}  -  {rec.error_message or ''}")
-            if rec.status is ExchangeStatus.TRANSPORT_ERROR:
-                self._connected = False
-                self.connection_bar.set_connected(False)
-                self._resume_cycle = self._cycle_timer.isActive() and self.actions.auto_reconnect.isChecked()
-                self._stop_cycle()
-                self._cmd_close.emit()
-                self._maybe_schedule_reconnect()
+    def _on_sniffer_stopped(self) -> None:
+        if self._sniffer is not None:
+            self._sniffer.wait(2000)
+            self._sniffer = None
+        self._role = Role.IDLE
+        self.sniffer_page.on_stopped()
+        self._set_status("Écoute arrêtée. Cliquez sur CONNEXION pour repasser en maître.")
+        self._update_availability()
 
-    def _on_request_failed(self, message: str) -> None:
-        self._busy = False
-        self.console.log_error(message)
-        self._set_status(f"Status : {message}")
+    def _on_passive_error(self, message: str) -> None:
+        self._set_status(message)
+        self.sniffer_page.status_message.emit(message)
 
-    # ================================================================== grille
-    def _display_options(self) -> codec.DisplayOptions:
-        return self.actions.display_options(self.request_bar.current_radix)
+    # ============================================================== esclave
+    def _start_slave(self, config: SlaveConfig) -> None:
+        if not self._settings.port:
+            QMessageBox.warning(self, APP_TITLE, "Choisissez un port dans CONFIGURATION.")
+            return
+        if self._role is Role.SNIFFER:
+            self._set_status("Arrêtez l'écoute avant de lancer le serveur esclave.")
+            return
+        if self._role is Role.MASTER:
+            self._manual_disconnect = True
+            self._cmd_close.emit()
+        self._role = Role.SLAVE
+        self._slave = SlaveWorker(self._settings, self.store, config, self)
+        w = self._slave
+        w.started_serving.connect(self.slave_page.on_started)
+        w.link_error.connect(self._on_slave_error)
+        w.handled.connect(lambda result: self.slave_page.on_handled(result, w.handler.counters))
+        w.store_changed.connect(self.slave_page.on_store_changed)
+        w.stopped.connect(self._on_slave_stopped)
+        w.start()
+        self._update_availability()
 
-    def _on_request_changed(self) -> None:
-        reg_type = self.request_bar.current_type
-        self.actions.set_bits_mode(reg_type.is_bits)
-        self.actions.set_writable(reg_type.writable)
-        self._last_values = None  # la grille ne correspond plus à une lecture
-        self._refresh_grid()
+    def _stop_slave(self) -> None:
+        if self._slave is not None:
+            self._slave.stop()
 
-    def _refresh_grid(self) -> None:
-        rb = self.request_bar
-        reg_type = rb.current_type
-        count = rb.count.value()
-        start = rb.register.value()
-        if self._last_values is not None and self._last_is_bits == reg_type.is_bits:
-            values, start, stale = self._last_values, self._last_start, False
-        else:
-            values, stale = (0,) * count, True
-        if reg_type.is_bits:
-            rows = codec.format_bits(values, start)
-        else:
-            rows = codec.format_registers(values, start, self._display_options())
-        self.grid.show_rows(rows)
-        self.grid.mark_stale(stale)
+    def _on_slave_stopped(self) -> None:
+        if self._slave is not None:
+            self._slave.wait(2000)
+            self._slave = None
+        self._role = Role.IDLE
+        self.slave_page.on_stopped()
+        self._set_status("Serveur esclave arrêté. Cliquez sur CONNEXION pour repasser en maître.")
+        self._update_availability()
 
-    def _clear(self) -> None:
-        self.console.clear()
-        self.exchange.clear()
-        self._last_values = None
-        self._refresh_grid()
+    def _on_slave_error(self, message: str) -> None:
+        self._set_status(message)
+        self.slave_page.log_panel.console.log_error(message)
 
-    # ============================================================== utilitaires
+    # ========================================================== disponibilité
+    def _update_availability(self) -> None:
+        busy = self.scan_ctl.active or self.campaign_ctl.active
+        master_ok = self._connected and self._role is Role.MASTER and not busy
+        port_free = self._role in (Role.IDLE, Role.MASTER) and not busy
+        self.sniffer_page.set_available(port_free)
+        self.slave_page.set_available(port_free)
+        self.scan_page.set_available(master_ok)
+        self.diagnostic_page.set_can_run_tests(master_ok)
+        self.connection_bar.connect_btn.setEnabled(not self._connected and self._role is Role.IDLE)
+        self.connection_bar.config_btn.setEnabled(self._role is Role.IDLE)
+
+    # ============================================================ utilitaires
     def _set_status(self, text: str) -> None:
         self.status_label.setText(text if text.startswith("Status") else f"Status : {text}")
 
@@ -350,7 +431,12 @@ class MainWindow(QMainWindow):
         qs.setValue("serial/dtr", "true" if s.dtr else "false")
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        self._cycle_timer.stop()
+        self.scan_ctl.cancel()
+        self.campaign_ctl.cancel()
+        for t in (self._sniffer, self._slave):
+            if t is not None:
+                t.stop()
+                t.wait(2000)
         self._cmd_close.emit()
         self._thread.quit()
         if not self._thread.wait(3000):

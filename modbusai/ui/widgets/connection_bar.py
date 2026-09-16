@@ -13,6 +13,7 @@ class ConnectionBar(QFrame):
     connect_requested = Signal()
     disconnect_requested = Signal()
     quit_requested = Signal()
+    theme_toggled = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -28,6 +29,8 @@ class ConnectionBar(QFrame):
         self.connect_btn = QPushButton("CONNEXION")
         self.disconnect_btn = QPushButton("DECONNEXION")
         self.disconnect_btn.setEnabled(False)
+        self.theme_btn = QPushButton("THÈME")
+        self.theme_btn.setToolTip("Basculer clair / sombre")
         self.quit_btn = QPushButton("QUITTER")
 
         layout = QHBoxLayout(self)
@@ -39,15 +42,20 @@ class ConnectionBar(QFrame):
         layout.addWidget(self.connect_btn)
         layout.addWidget(self.disconnect_btn)
         layout.addStretch(1)
+        layout.addWidget(self.theme_btn)
         layout.addWidget(self.quit_btn)
 
         self.config_btn.clicked.connect(self.configure_requested)
         self.connect_btn.clicked.connect(self.connect_requested)
         self.disconnect_btn.clicked.connect(self.disconnect_requested)
         self.quit_btn.clicked.connect(self.quit_requested)
+        self.theme_btn.clicked.connect(self.theme_toggled)
 
     def show_settings(self, settings: SerialSettings) -> None:
         self.summary.setText(settings.summary() if settings.port else "Aucun port")
+
+    def set_theme(self, name: str) -> None:
+        self.theme_btn.setText("THÈME : SOMBRE" if name == "sombre" else "THÈME : CLAIR")
 
     def set_connected(self, connected: bool) -> None:
         self.connect_btn.setEnabled(not connected)

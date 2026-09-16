@@ -16,7 +16,6 @@ def run(argv: list[str] | None = None) -> int:
     QCoreApplication.setApplicationName(APP_NAME)
     QCoreApplication.setApplicationVersion(__version__)
     app = QApplication(argv if argv is not None else sys.argv)
-    app.setStyle("Fusion")
     window = MainWindow()
     window.show()
     return app.exec()

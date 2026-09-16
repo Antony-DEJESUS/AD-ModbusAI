@@ -86,7 +86,7 @@ class SerialLink:
             ser.open()
             ser.reset_input_buffer()
             ser.reset_output_buffer()
-        except (serial.SerialException, ValueError, OSError, KeyError) as exc:
+        except Exception as exc:  # noqa: BLE001 - pyserial lève des types propres à l'OS (termios.error…)
             self._state = LinkState.ERROR
             self._last_error = str(exc)
             raise TransportError(f"Ouverture de {s.port} impossible : {exc}") from exc

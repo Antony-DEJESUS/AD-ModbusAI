@@ -98,7 +98,7 @@ def test_identification():
 
     body = roundtrip(h, Request(1, FC.READ_DEVICE_ID, 1, 0))
     ident = decode_device_id(bytes(body))
-    assert ident.vendor == "ModbusAI" and ident.revision == "0.2"
+    assert ident.vendor == "ModbusAI" and ident.revision == "0.2.0"
     rid = roundtrip(h, Request(1, FC.REPORT_SLAVE_ID, 0))
     assert "en marche" in decode_report_slave_id(bytes(rid))
 

@@ -1,4 +1,4 @@
-"""Panneau droit : MODE ESPION (désactivé en phase 1), EFFACER, détail du dernier échange."""
+"""Panneau droit : EFFACER et détail du dernier échange."""
 
 from __future__ import annotations
 
@@ -16,14 +16,11 @@ class ExchangePanel(QFrame):
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setMinimumWidth(300)
 
-        self.spy_btn = QPushButton("MODE ESPION")
-        self.spy_btn.setEnabled(False)
-        self.spy_btn.setToolTip("Mode passif (écoute du bus) : phase ultérieure")
         self.clear_btn = QPushButton("EFFACER")
+        self.clear_btn.setToolTip("Vider la grille, le dernier échange et le journal")
         self.clear_btn.clicked.connect(self.clear_requested)
 
         buttons = QHBoxLayout()
-        buttons.addWidget(self.spy_btn)
         buttons.addWidget(self.clear_btn)
         buttons.addStretch(1)
 
