@@ -12,8 +12,10 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 
+from modbusai.analysis.campaign import CampaignSpec
 from modbusai.analysis.observations import Observation, SlaveStats
 from modbusai.modbus.exceptions import exception_label
+from modbusai.modbus.records import Request
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings
 
 MIN_SAMPLES = 5  # en dessous, on ne conclut pas
@@ -25,8 +27,9 @@ class SuggestedTest:
     title: str
     description: str
     runnable: bool = False
-    count: int = 30  # nombre de lectures de la campagne
+    count: int | None = None  # limite haute de lectures ; None = jusqu'à la durée
     period_ms: int = 200
+    duration_s: float | None = 120.0  # « le test se fait pendant deux minutes »
     timeout_ms: float | None = None
     baudrate: int | None = None
     parity: Parity | None = None
@@ -55,6 +58,20 @@ class SuggestedTest:
         return any(
             v is not None
             for v in (self.timeout_ms, self.baudrate, self.parity, self.stopbits, self.inter_frame_delay_ms)
+        )
+
+    def to_campaign(self, request: Request) -> CampaignSpec:
+        return CampaignSpec(
+            request,
+            period_ms=self.period_ms,
+            duration_s=self.duration_s,
+            max_count=self.count,
+            timeout_ms=self.timeout_ms,
+            baudrate=self.baudrate,
+            parity=self.parity,
+            stopbits=self.stopbits,
+            inter_frame_delay_ms=self.inter_frame_delay_ms,
+            label=self.title,
         )
 
 

@@ -17,3 +17,5 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
 "modbusai/analysis/diagnostic.py" = ["E501"]  # libellés d'hypothèses en français
+"modbusai/analysis/stress.py" = ["E501"]
+"modbusai/analysis/report.py" = ["E501"]
