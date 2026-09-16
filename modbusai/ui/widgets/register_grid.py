@@ -23,7 +23,6 @@ class RegisterGrid(QTableWidget):
             | QAbstractItemView.EditTrigger.EditKeyPressed
             | QAbstractItemView.EditTrigger.AnyKeyPressed
         )
-        self.setAlternatingRowColors(True)
         self.setMinimumWidth(220)
 
     def show_rows(self, rows: Sequence[DisplayRow]) -> None:

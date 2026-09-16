@@ -53,6 +53,7 @@ class MainWindow(QMainWindow):
         self._last_start = 0
         self._last_is_bits = False
         self._reconnect_pending = False
+        self._resume_cycle = False  # cycle interrompu par une panne de liaison, à reprendre après reconnexion
 
         # ------------------------------------------------------------ widgets
         self.connection_bar = ConnectionBar()
@@ -141,6 +142,7 @@ class MainWindow(QMainWindow):
 
     def _disconnect(self) -> None:
         self._reconnect_pending = False
+        self._resume_cycle = False
         self._stop_cycle()
         self._cmd_close.emit()
 
@@ -153,6 +155,9 @@ class MainWindow(QMainWindow):
             f"silence fin de trame {settings.frame_gap_ms:.2f} ms)"
         )
         self.console.log_info(f"Connexion {settings.summary()}")
+        if self._resume_cycle and self.actions.cyclic.isChecked():
+            self._start_cycle("Cycle repris")
+        self._resume_cycle = False
 
     def _on_disconnected(self) -> None:
         self._connected = False
@@ -187,10 +192,13 @@ class MainWindow(QMainWindow):
         if not self._ensure_connected():
             return
         if self.actions.cyclic.isChecked() and not self._cycle_timer.isActive():
-            self._cycle_timer.start(self.actions.cycle_period_ms)
-            self.actions.set_cycling(True)
-            self.console.log_info(f"Cycle démarré ({self.actions.cycle_period_ms} ms)")
+            self._start_cycle("Cycle démarré")
         self._send(self._read_request())
+
+    def _start_cycle(self, message: str) -> None:
+        self._cycle_timer.start(self.actions.cycle_period_ms)
+        self.actions.set_cycling(True)
+        self.console.log_info(f"{message} ({self.actions.cycle_period_ms} ms)")
 
     def _write(self) -> None:
         if not self._ensure_connected():
@@ -264,6 +272,7 @@ class MainWindow(QMainWindow):
             if rec.status is ExchangeStatus.TRANSPORT_ERROR:
                 self._connected = False
                 self.connection_bar.set_connected(False)
+                self._resume_cycle = self._cycle_timer.isActive() and self.actions.auto_reconnect.isChecked()
                 self._stop_cycle()
                 self._cmd_close.emit()
                 self._maybe_schedule_reconnect()
