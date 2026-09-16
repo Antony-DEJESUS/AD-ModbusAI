@@ -20,6 +20,167 @@ from modbusai.transport.records import LinkSettings, Parity, SerialSettings
 
 MIN_SAMPLES = 5  # en dessous, on ne conclut pas
 
+SCORE_LEGEND = (
+    (0, 49, "peu probable", "#2ea043"),
+    (50, 74, "probable", "#d29922"),
+    (75, 100, "très probable", "#e5534b"),
+)
+SCORE_EXPLANATION = (
+    "Le score (0 à 100) est une vraisemblance : il monte avec la part des échanges qui présentent la signature "
+    "de l'hypothèse (timeouts, CRC, réponses incohérentes, temps de réponse) et avec le nombre d'observations. "
+    "Il ne dit pas qu'une cause est certaine : les tests proposés servent à départager les hypothèses."
+)
+
+
+@dataclass(frozen=True, slots=True)
+class HypothesisInfo:
+    """Fiche d'une hypothèse : ce qui la déclenche, les causes physiques, comment la départager.
+    Les règles d'analyse en tirent titre et résumé : une seule source de vérité."""
+
+    key: str
+    title: str
+    summary: str
+    trigger: str  # condition mesurée qui fait apparaître l'hypothèse
+    causes: tuple[str, ...]  # causes physiques classiques sur chantier
+    how_to_confirm: tuple[str, ...]  # tests et vérifications
+
+
+CATALOGUE: dict[str, HypothesisInfo] = {
+    "absent": HypothesisInfo(
+        "absent",
+        "Esclave absent, adresse ou câblage incorrect",
+        "Rien ne répond à cette adresse : équipement hors tension, adresse différente, A/B inversés ou vitesse fausse.",
+        "Au moins 5 requêtes, aucune réponse valide ni exception, plus de 90 % de timeouts.",
+        (
+            "équipement hors tension ou en défaut",
+            "adresse esclave différente de celle attendue",
+            "fils A et B inversés",
+            "vitesse ou parité différente (l'esclave ne reconnaît pas la trame)",
+            "bus coupé entre le maître et l'esclave",
+        ),
+        (
+            "scanner les adresses (onglet Scan réseau)",
+            "inverser A et B",
+            "balayer vitesses et parités",
+            "essayer FC03 puis FC04 sur le registre 0",
+        ),
+    ),
+    "framing": HypothesisInfo(
+        "framing",
+        "Vitesse ou parité incorrecte",
+        "L'équipement répond mais les octets sont mal interprétés : paramètres série différents de ceux de l'esclave.",
+        "Plus de 30 % de réponses au CRC invalide et moins de 50 % de réussite.",
+        (
+            "vitesse différente entre maître et esclave",
+            "parité ou bits de stop différents",
+            "esclave en 7 bits de données",
+        ),
+        ("balayage des vitesses et parités (Scan réseau)", "campagne en 8E1", "campagne en 8N2"),
+    ),
+    "line": HypothesisInfo(
+        "line",
+        "Qualité de ligne : bruit, terminaisons, longueur",
+        "Échanges majoritairement bons mais défauts aléatoires : typique d'un bus mal terminé, non polarisé, trop long ou perturbé.",
+        "Plus de 50 % de réussite avec au moins 2 % de défauts intermittents (CRC, timeouts, incohérentes).",
+        (
+            "terminaisons 120 Ω absentes, doublées ou mal placées",
+            "polarisation (pull-up / pull-down) absente",
+            "bus trop long pour la vitesse",
+            "blindage non relié ou relié aux deux extrémités",
+            "câble non torsadé, cheminement près de variateurs",
+            "connexion oxydée ou vis desserrée",
+        ),
+        (
+            "vérifier terminaisons et polarisation",
+            "campagne à 9600 bauds",
+            "campagne à période lente",
+            "test de torture : les trames longues souffrent plus que les courtes",
+        ),
+    ),
+    "slow": HypothesisInfo(
+        "slow",
+        "Esclave lent, timeout trop court",
+        "Les réponses réussies frôlent le délai configuré : les timeouts sont probablement des réponses arrivées trop tard.",
+        "Des timeouts et un P95 du temps de réponse supérieur à 60 % du timeout.",
+        (
+            "équipement lent à répondre (passerelle, automate chargé)",
+            "timeout de supervision trop court",
+            "réponse retardée par une passerelle RTU/TCP",
+        ),
+        ("campagne avec timeout doublé", "test de torture : phase timeout serré"),
+    ),
+    "echo": HypothesisInfo(
+        "echo",
+        "Écho de l'adaptateur (direction RS-485)",
+        "L'outil reçoit sa propre requête : l'adaptateur ne coupe pas la réception pendant l'émission.",
+        "Réponses incohérentes qui sont l'écho exact de la requête émise.",
+        ("adaptateur USB/RS-485 sans direction automatique", "RTS non piloté", "adaptateur 4 fils câblé en 2 fils"),
+        ("activer le pilotage RTS dans CONFIGURATION", "changer d'adaptateur (CH340, FTDI avec TXDEN)"),
+    ),
+    "conflict": HypothesisInfo(
+        "conflict",
+        "Conflit d'adresse ou réponse d'un autre esclave",
+        "Une réponse valide arrive mais ne correspond pas à la requête : deux équipements partagent probablement l'adresse.",
+        "Réponses au CRC juste mais esclave, fonction ou longueur incohérents (hors écho).",
+        (
+            "deux esclaves à la même adresse",
+            "équipement qui répond à toutes les adresses",
+            "réponse tardive d'une requête précédente",
+        ),
+        (
+            "écouter le bus (onglet Espion) : deux réponses à une même requête",
+            "débrancher les esclaves un par un",
+            "scanner les adresses",
+        ),
+    ),
+    "exception": HypothesisInfo(
+        "exception",
+        "Adresse ou fonction refusée par l'esclave",
+        "Pas un problème réseau : l'équipement répond mais refuse la requête (registre inexistant, fonction non supportée).",
+        "Plus de 50 % d'exceptions Modbus (codes 01, 02, 03...).",
+        (
+            "adresse de registre hors table (base 0 / base 1)",
+            "type de registre erroné (holding / input)",
+            "longueur de lecture supérieure au maximum de l'équipement",
+            "fonction non supportée",
+        ),
+        ("vérifier la table d'échange", "essayer FC04 / FC03 et longueur 1"),
+    ),
+    "fragment": HypothesisInfo(
+        "fragment",
+        "Délai inter-trames trop court (fragmentation USB)",
+        "Des réponses arrivent en plusieurs morceaux séparés de plus que le silence configuré, et sont lues comme deux trames.",
+        "Au moins deux réponses très courtes (moins de 7 octets) en CRC invalide ou incohérentes.",
+        ("adaptateur USB à forte latence (16 ms)", "délai inter-trames réglé trop bas", "PC chargé"),
+        ("campagne avec silence de fin de trame à 20 ms", "régler le délai inter-trames dans CONFIGURATION"),
+    ),
+    "transport": HypothesisInfo(
+        "transport",
+        "Adaptateur USB / port série instable",
+        "Le port lui-même disparaît ou refuse d'émettre : le défaut est côté PC / adaptateur, pas sur le bus.",
+        "Au moins une erreur de liaison (port disparu, écriture refusée) dans la session.",
+        (
+            "câble USB ou concentrateur défaillant",
+            "pilote de l'adaptateur",
+            "alimentation de l'adaptateur isolé",
+            "mise en veille USB de Windows",
+        ),
+        (
+            "changer de port USB et de câble",
+            "vérifier l'alimentation de l'adaptateur",
+            "désactiver la mise en veille sélective USB",
+        ),
+    ),
+    "healthy": HypothesisInfo(
+        "healthy",
+        "Réseau sain sur la période observée",
+        "Aucun défaut significatif ; prolonger l'observation (cyclique ou espion) si le problème est intermittent.",
+        "Au moins 99 % d'échanges valides (OK ou exception) sur au moins 5 observations.",
+        ("aucune", "défaut intermittent non capturé sur la période"),
+        ("prolonger en cyclique ou en espion", "lancer le test de torture"),
+    ),
+}
+
 
 @dataclass(frozen=True, slots=True)
 class SuggestedTest:
@@ -127,9 +288,9 @@ def _rule_absent(st: SlaveStats) -> Hypothesis | None:
     ]
     return Hypothesis(
         "absent",
-        "Esclave absent, adresse ou câblage incorrect",
+        CATALOGUE["absent"].title,
         _clamp(60 + 40 * st.timeout_ratio),
-        "Rien ne répond à cette adresse : équipement hors tension, adresse différente, A/B inversés ou vitesse fausse.",
+        CATALOGUE["absent"].summary,
         st.slave_id,
         ev,
         tests,
@@ -168,9 +329,9 @@ def _rule_framing(st: SlaveStats) -> Hypothesis | None:
     ]
     return Hypothesis(
         "framing",
-        "Vitesse ou parité incorrecte",
+        CATALOGUE["framing"].title,
         _clamp(50 + 50 * ratio),
-        "L'équipement répond mais les octets sont mal interprétés : paramètres série différents de ceux de l'esclave.",
+        CATALOGUE["framing"].summary,
         st.slave_id,
         ev,
         tests,
@@ -220,9 +381,9 @@ def _rule_line_quality(st: SlaveStats, settings: LinkSettings | None) -> Hypothe
         score += 15
     return Hypothesis(
         "line",
-        "Qualité de ligne : bruit, terminaisons, longueur",
+        CATALOGUE["line"].title,
         _clamp(score),
-        "Échanges majoritairement bons mais défauts aléatoires : typique d'un bus mal terminé, non polarisé, trop long ou perturbé.",
+        CATALOGUE["line"].summary,
         st.slave_id,
         ev,
         tests,
@@ -250,9 +411,9 @@ def _rule_slow_slave(st: SlaveStats, settings: LinkSettings | None) -> Hypothesi
     ]
     return Hypothesis(
         "slow",
-        "Esclave lent, timeout trop court",
+        CATALOGUE["slow"].title,
         _clamp(40 + 60 * min(1.0, p95 / settings.response_timeout_ms)),
-        "Les réponses réussies frôlent le délai configuré : les timeouts sont probablement des réponses arrivées trop tard.",
+        CATALOGUE["slow"].summary,
         st.slave_id,
         ev,
         tests,
@@ -278,9 +439,9 @@ def _rule_conflict(st: SlaveStats) -> Hypothesis | None:
         ]
         return Hypothesis(
             "echo",
-            "Écho de l'adaptateur (direction RS-485)",
+            CATALOGUE["echo"].title,
             _clamp(50 + 50 * st.bad_response / st.total),
-            "L'outil reçoit sa propre requête : l'adaptateur ne coupe pas la réception pendant l'émission.",
+            CATALOGUE["echo"].summary,
             st.slave_id,
             ev,
             tests,
@@ -300,9 +461,9 @@ def _rule_conflict(st: SlaveStats) -> Hypothesis | None:
     ]
     return Hypothesis(
         "conflict",
-        "Conflit d'adresse ou réponse d'un autre esclave",
+        CATALOGUE["conflict"].title,
         _clamp(40 + 60 * st.bad_response / st.total),
-        "Une réponse valide arrive mais ne correspond pas à la requête : deux équipements partagent probablement l'adresse.",
+        CATALOGUE["conflict"].summary,
         st.slave_id,
         ev,
         tests,
@@ -331,9 +492,9 @@ def _rule_exceptions(st: SlaveStats) -> Hypothesis | None:
     ]
     return Hypothesis(
         "exception",
-        "Adresse ou fonction refusée par l'esclave",
+        CATALOGUE["exception"].title,
         _clamp(50 + 50 * st.exception_ratio),
-        "Pas un problème réseau : l'équipement répond mais refuse la requête (registre inexistant, fonction non supportée).",
+        CATALOGUE["exception"].summary,
         st.slave_id,
         ev,
         tests,
@@ -367,9 +528,9 @@ def _rule_fragmentation(
     ]
     return Hypothesis(
         "fragment",
-        "Délai inter-trames trop court (fragmentation USB)",
+        CATALOGUE["fragment"].title,
         _clamp(40 + 15 * len(truncated)),
-        "Des réponses arrivent en plusieurs morceaux séparés de plus que le silence configuré, et sont lues comme deux trames.",
+        CATALOGUE["fragment"].summary,
         st.slave_id,
         ev,
         tests,
@@ -396,9 +557,9 @@ def _rule_transport(stats: dict[int, SlaveStats]) -> Hypothesis | None:
     ]
     return Hypothesis(
         "transport",
-        "Adaptateur USB / port série instable",
+        CATALOGUE["transport"].title,
         _clamp(40 + 20 * n),
-        "Le port lui-même disparaît ou refuse d'émettre : le défaut est côté PC / adaptateur, pas sur le bus.",
+        CATALOGUE["transport"].summary,
         None,
         ev,
         tests,
@@ -420,9 +581,9 @@ def _rule_healthy(stats: dict[int, SlaveStats]) -> Hypothesis | None:
             ev.append(f"esclave {st.slave_id} : {st.rt_avg:.1f} ms en moyenne, max {st.rt_max:.1f} ms")
     return Hypothesis(
         "healthy",
-        "Réseau sain sur la période observée",
+        CATALOGUE["healthy"].title,
         _clamp(60 + 40 * ok / total),
-        "Aucun défaut significatif ; prolonger l'observation (cyclique ou espion) si le problème est intermittent.",
+        CATALOGUE["healthy"].summary,
         None,
         ev,
         [],

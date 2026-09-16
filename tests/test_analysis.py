@@ -236,3 +236,29 @@ def test_session_store():
     assert set(store.stats(sources=["maitre"])) == {1}
     store.clear()
     assert len(store) == 0
+
+
+def test_catalogue_covers_all_hypotheses():
+    from modbusai.analysis.diagnostic import CATALOGUE, SCORE_LEGEND
+
+    produced = set()
+    scenarios = [
+        obs(1, ExchangeStatus.TIMEOUT, n=10),
+        obs(1, ExchangeStatus.CRC_ERROR, n=8) + obs(1, ExchangeStatus.OK, 10.0, n=2),
+        obs(1, ExchangeStatus.OK, 10.0, n=95)
+        + obs(1, ExchangeStatus.CRC_ERROR, n=3)
+        + obs(1, ExchangeStatus.TIMEOUT, n=2),
+        obs(1, ExchangeStatus.OK, 800.0, n=8) + obs(1, ExchangeStatus.TIMEOUT, n=2),
+        obs(1, ExchangeStatus.BAD_RESPONSE, n=6, echo=True),
+        obs(1, ExchangeStatus.BAD_RESPONSE, n=6),
+        obs(1, ExchangeStatus.MODBUS_EXCEPTION, 12.0, code=2, n=6),
+        obs(1, ExchangeStatus.OK, 10.0, n=10) + obs(1, ExchangeStatus.CRC_ERROR, n=3, rx_len=4),
+        obs(1, ExchangeStatus.OK, 10.0, n=10) + obs(1, ExchangeStatus.TRANSPORT_ERROR, n=2),
+        obs(1, ExchangeStatus.OK, 10.0, n=50),
+    ]
+    for sc in scenarios:
+        for h in analyse(compute_stats(sc), sc, SETTINGS):
+            produced.add(h.key)
+            assert h.key in CATALOGUE and h.title == CATALOGUE[h.key].title
+    assert produced == set(CATALOGUE)
+    assert SCORE_LEGEND[0][0] == 0 and SCORE_LEGEND[-1][1] == 100

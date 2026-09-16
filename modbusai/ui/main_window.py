@@ -14,12 +14,12 @@ from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QMessageBox, QTabWidget, QVBoxLayout, QWidget
 
 from modbusai import APP_TITLE
-from modbusai.analysis.diagnostic import Hypothesis, SuggestedTest
+from modbusai.analysis.campaign import CampaignSpec
 from modbusai.analysis.session import SessionStore
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus
 from modbusai.modbus.slave import DataStore, SlaveConfig
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
-from modbusai.ui.controllers import CampaignController, ScanController, probe_request_for
+from modbusai.ui.controllers import CampaignController, ScanController, StressController
 from modbusai.ui.pages.diagnostic_page import DiagnosticPage
 from modbusai.ui.pages.master_page import MasterPage
 from modbusai.ui.pages.scan_page import ScanPage
@@ -100,6 +100,8 @@ class MainWindow(QMainWindow):
 
         self.scan_ctl = ScanController(self.session, self)
         self.campaign_ctl = CampaignController(self.session, self)
+        self.stress_ctl = StressController(self.campaign_ctl, self)
+        self._pending_after_connect = None  # action à lancer dès que la liaison est ouverte
         for ctl in (self.scan_ctl, self.campaign_ctl):
             ctl.execute_requested.connect(self._cmd_execute)
             ctl.reopen_requested.connect(self._reopen_for_controller)
@@ -131,11 +133,14 @@ class MainWindow(QMainWindow):
         self.scan_ctl.result_ready.connect(self.scan_page.on_result)
         self.scan_ctl.finished.connect(self._on_scan_finished)
 
-        self.diagnostic_page.run_test_requested.connect(self._start_campaign)
-        self.diagnostic_page.cancel_test_requested.connect(self.campaign_ctl.cancel)
+        self.diagnostic_page.campaign_requested.connect(self._start_campaign)
+        self.diagnostic_page.stress_requested.connect(self._start_stress)
+        self.diagnostic_page.cancel_requested.connect(self._cancel_diagnostic)
         self.diagnostic_page.status_message.connect(self._set_status)
-        self.campaign_ctl.progress.connect(self.diagnostic_page.on_test_progress)
+        self.campaign_ctl.progress.connect(self.diagnostic_page.on_progress)
         self.campaign_ctl.finished.connect(self._on_campaign_finished)
+        self.stress_ctl.phase_started.connect(self.diagnostic_page.on_stress_phase)
+        self.stress_ctl.finished.connect(self._on_stress_finished)
 
         self.slave_page.start_requested.connect(self._start_slave)
         self.slave_page.stop_requested.connect(self._stop_slave)
@@ -213,6 +218,7 @@ class MainWindow(QMainWindow):
         self._manual_disconnect = True
         self._reconnect_pending = False
         self.scan_ctl.cancel()
+        self.stress_ctl.cancel()
         self.campaign_ctl.cancel()
         self._cmd_close.emit()
 
@@ -231,6 +237,9 @@ class MainWindow(QMainWindow):
         self._set_status(f"Connecté : {settings.summary()} ({detail})")
         self.master_page.on_connected(settings.summary())
         self._update_availability()
+        pending, self._pending_after_connect = self._pending_after_connect, None
+        if pending is not None:
+            QTimer.singleShot(0, pending)
 
     def _on_disconnected(self) -> None:
         self._connected = False
@@ -243,6 +252,7 @@ class MainWindow(QMainWindow):
         self._update_availability()
 
     def _on_link_error(self, message: str) -> None:
+        self._pending_after_connect = None
         self._connected = False
         if self._role is Role.MASTER:
             self._role = Role.IDLE
@@ -309,25 +319,59 @@ class MainWindow(QMainWindow):
         self._update_availability()
 
     # ============================================================ campagnes
-    def _start_campaign(self, test: SuggestedTest, hyp: Hypothesis) -> None:
-        if not self._connected or self._role is not Role.MASTER or hyp.slave_id is None:
-            self._set_status("Les tests utilisent la liaison du maître : cliquez d'abord sur CONNEXION.")
+    def _ensure_master_link(self, then) -> bool:
+        """Exécute ``then`` tout de suite si la liaison maître est ouverte, sinon
+        l'ouvre d'abord (le diagnostic ne dépend pas de l'onglet Maître)."""
+        if self._connected and self._role is Role.MASTER:
+            return True
+        if self._role is not Role.IDLE:
+            self._set_status("Arrêtez l'espion ou le serveur esclave : le port est occupé.")
+            return False
+        if not self._target_defined():
+            return False
+        self._pending_after_connect = then
+        self._manual_disconnect = False
+        self._set_status(f"Ouverture de {self._settings.summary()} pour le diagnostic…")
+        self._cmd_open.emit(self._settings)
+        return False
+
+    def _start_campaign(self, spec: CampaignSpec) -> None:
+        if self.scan_ctl.active or self.campaign_ctl.active or self.stress_ctl.active:
+            self._set_status("Un scan ou une campagne est déjà en cours.")
             return
-        if self.scan_ctl.active or self.campaign_ctl.active:
-            self._set_status("Un scan ou un test est déjà en cours.")
+        if not self._ensure_master_link(lambda: self._start_campaign(spec)):
             return
-        baseline = self.diagnostic_page.stats_for(hyp.slave_id)
-        if baseline is None:
-            self._set_status("Pas de statistiques de référence pour cet esclave.")
-            return
-        request = probe_request_for(hyp.slave_id, self.master_page._read_request())
-        self.diagnostic_page.on_test_started(test, hyp)
+        self.diagnostic_page.on_campaign_started(spec)
         self.master_page.set_interactive(False)
-        self.campaign_ctl.start(test, baseline, request, self._settings)
+        self.campaign_ctl.start(spec, self._settings)
         self._update_availability()
 
-    def _on_campaign_finished(self, comparison) -> None:
-        self.diagnostic_page.on_test_finished(comparison)
+    def _start_stress(self, phases) -> None:
+        if self.scan_ctl.active or self.campaign_ctl.active or self.stress_ctl.active:
+            self._set_status("Un scan ou une campagne est déjà en cours.")
+            return
+        if not self._ensure_master_link(lambda: self._start_stress(phases)):
+            return
+        self.diagnostic_page.on_stress_started(phases)
+        self.master_page.set_interactive(False)
+        self.stress_ctl.start(phases, self._settings)
+        self._update_availability()
+
+    def _cancel_diagnostic(self) -> None:
+        if self.stress_ctl.active:
+            self.stress_ctl.cancel()
+        else:
+            self.campaign_ctl.cancel()
+
+    def _on_campaign_finished(self, stats) -> None:
+        if self.stress_ctl.active:
+            return  # le contrôleur de torture enchaîne les phases
+        self.diagnostic_page.on_campaign_finished(stats)
+        self.master_page.set_interactive(True)
+        self._update_availability()
+
+    def _on_stress_finished(self, report) -> None:
+        self.diagnostic_page.on_stress_finished(report)
         self.master_page.set_interactive(True)
         self._update_availability()
 
@@ -422,7 +466,7 @@ class MainWindow(QMainWindow):
 
     # ========================================================== disponibilité
     def _update_availability(self) -> None:
-        busy = self.scan_ctl.active or self.campaign_ctl.active
+        busy = self.scan_ctl.active or self.campaign_ctl.active or self.stress_ctl.active
         master_ok = self._connected and self._role is Role.MASTER and not busy
         port_free = self._role in (Role.IDLE, Role.MASTER) and not busy
         self.sniffer_page.set_available(
@@ -430,7 +474,7 @@ class MainWindow(QMainWindow):
         )
         self.slave_page.set_available(port_free)
         self.scan_page.set_available(master_ok)
-        self.diagnostic_page.set_can_run_tests(master_ok)
+        self.diagnostic_page.set_can_run_tests(port_free)
         self.connection_bar.connect_btn.setEnabled(not self._connected and self._role is Role.IDLE)
         self.connection_bar.config_btn.setEnabled(self._role is Role.IDLE)
 
@@ -482,6 +526,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self.scan_ctl.cancel()
+        self.stress_ctl.cancel()
         self.campaign_ctl.cancel()
         for t in (self._sniffer, self._slave):
             if t is not None:

@@ -4,16 +4,18 @@ vient de ``analysis`` ; ici on ne fait qu'ordonnancer."""
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import replace
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from modbusai.analysis.diagnostic import CampaignComparison, SuggestedTest
+from modbusai.analysis.campaign import CampaignSpec
 from modbusai.analysis.identification import decode_device_id, decode_report_slave_id
 from modbusai.analysis.observations import Observation, SlaveStats, compute_stats
 from modbusai.analysis.scanner import ScanPlan, ScanResult, ScanStatus, identification_requests, merge_attempts
 from modbusai.analysis.session import SessionStore
+from modbusai.analysis.stress import PhaseResult, StressPhase, evaluate
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus, FunctionCode, Request
 from modbusai.transport.records import LinkSettings
 from modbusai.ui.workers import ExecuteJob
@@ -198,26 +200,28 @@ class ScanController(QObject):
 
 
 class CampaignController(QObject):
-    """Campagne de N lectures pour un test de diagnostic, avec paramètres surchargés."""
+    """Campagne de lectures (durée et / ou nombre) avec paramètres de liaison surchargés."""
 
     execute_requested = Signal(object)
     reopen_requested = Signal(object)
-    progress = Signal(int, int)
-    finished = Signal(object)  # CampaignComparison | None
+    progress = Signal(int, int, float, float)  # lectures faites, attendues, écoulé s, restant s
+    finished = Signal(object)  # SlaveStats de la campagne, ou None si interrompue avant toute lecture
     TAG = "test"
 
     def __init__(self, session: SessionStore, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.session = session
         self._active = False
-        self._test: SuggestedTest | None = None
-        self._baseline: SlaveStats | None = None
-        self._request: Request | None = None
+        self._spec: CampaignSpec | None = None
         self._base_settings: LinkSettings | None = None
         self._records: list[ExchangeRecord] = []
+        self._started_ns = 0
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._send)
+        self._tick = QTimer(self)
+        self._tick.setInterval(250)
+        self._tick.timeout.connect(self._emit_progress)
         self._waiting_reopen = False
         self._restoring = False
 
@@ -225,14 +229,20 @@ class CampaignController(QObject):
     def active(self) -> bool:
         return self._active
 
-    def start(self, test: SuggestedTest, baseline: SlaveStats, request: Request, base_settings: LinkSettings) -> None:
-        self._test, self._baseline, self._request, self._base_settings = test, baseline, request, base_settings
+    @property
+    def spec(self) -> CampaignSpec | None:
+        return self._spec
+
+    def start(self, spec: CampaignSpec, base_settings: LinkSettings) -> None:
+        self._spec, self._base_settings = spec, base_settings
         self._records = []
         self._active = True
         self._restoring = False
-        if test.changes_link:
+        self._started_ns = time.perf_counter_ns()
+        self._tick.start()
+        if spec.changes_link:
             self._waiting_reopen = True
-            self.reopen_requested.emit(test.apply(base_settings))
+            self.reopen_requested.emit(spec.apply(base_settings))
         else:
             self._send()
 
@@ -240,7 +250,7 @@ class CampaignController(QObject):
         if self._active:
             self._active = False
             self._timer.stop()
-            self._finish(None)
+            self._finish()
 
     def on_connected(self, settings: LinkSettings) -> None:
         if self._restoring:
@@ -248,44 +258,119 @@ class CampaignController(QObject):
             return
         if self._active and self._waiting_reopen:
             self._waiting_reopen = False
+            self._started_ns = time.perf_counter_ns()
             self._send()
 
     def on_link_error(self, message: str) -> None:
         if self._active and self._waiting_reopen:
             self._waiting_reopen = False
             self._active = False
-            self._finish(None)
+            self._finish()
 
     def on_record(self, rec: ExchangeRecord, job: ExecuteJob) -> None:
-        if not self._active or job.tag != self.TAG or self._test is None:
+        if not self._active or job.tag != self.TAG or self._spec is None:
             return
         self.session.add_record(rec, source=self.TAG)
         self._records.append(rec)
-        self.progress.emit(len(self._records), self._test.count)
-        if rec.status is ExchangeStatus.TRANSPORT_ERROR or len(self._records) >= self._test.count:
+        self._emit_progress()
+        if rec.status is ExchangeStatus.TRANSPORT_ERROR or self._spec.is_done(len(self._records), self._elapsed_s()):
             self._active = False
-            slave_id = self._request.slave_id if self._request is not None else -1
-            result = compute_stats(Observation.from_record(r, self.TAG) for r in self._records).get(
-                slave_id, SlaveStats(slave_id)
-            )
-            self._finish(CampaignComparison(self._test, self._baseline, result) if self._baseline is not None else None)
+            self._finish()
             return
-        self._timer.start(self._test.period_ms)
+        self._timer.start(self._spec.period_ms)
 
     def on_request_failed(self, message: str, job: ExecuteJob) -> None:
         if self._active and job.tag == self.TAG:
             self._active = False
-            self._finish(None)
+            self._finish()
+
+    def _elapsed_s(self) -> float:
+        return (time.perf_counter_ns() - self._started_ns) / 1e9
+
+    def _emit_progress(self) -> None:
+        if self._spec is None:
+            return
+        elapsed = self._elapsed_s()
+        remaining = max(0.0, (self._spec.duration_s or 0.0) - elapsed) if self._spec.duration_s else 0.0
+        self.progress.emit(len(self._records), self._spec.expected_count() or 0, elapsed, remaining)
 
     def _send(self) -> None:
-        if self._active and self._request is not None and self._test is not None:
-            self.execute_requested.emit(ExecuteJob(self._request, self._test.timeout_ms, self.TAG))
+        if self._active and self._spec is not None:
+            self.execute_requested.emit(ExecuteJob(self._spec.request, self._spec.timeout_ms, self.TAG))
 
-    def _finish(self, comparison: CampaignComparison | None) -> None:
-        if self._test is not None and self._test.changes_link and self._base_settings is not None:
+    def _finish(self) -> None:
+        self._tick.stop()
+        self._timer.stop()
+        result: SlaveStats | None = None
+        if self._records and self._spec is not None:
+            slave_id = self._spec.request.slave_id
+            result = compute_stats(Observation.from_record(r, self.TAG) for r in self._records).get(
+                slave_id, SlaveStats(slave_id)
+            )
+        if self._spec is not None and self._spec.changes_link and self._base_settings is not None:
             self._restoring = True
             self.reopen_requested.emit(self._base_settings)
-        self.finished.emit(comparison)
+        self.finished.emit(result)
+
+
+class StressController(QObject):
+    """Enchaîne les phases d'un scénario de torture sur un CampaignController."""
+
+    phase_started = Signal(int, int, object)  # index, total, StressPhase
+    progress = Signal(int, int, float, float)
+    finished = Signal(object)  # StressReport | None
+
+    def __init__(self, campaign: CampaignController, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self.campaign = campaign
+        self._phases: list[StressPhase] = []
+        self._results: list[PhaseResult] = []
+        self._index = -1
+        self._active = False
+        self._settings: LinkSettings | None = None
+        campaign.progress.connect(self._on_progress)
+        campaign.finished.connect(self._on_phase_finished)
+
+    @property
+    def active(self) -> bool:
+        return self._active
+
+    def start(self, phases: list[StressPhase], base_settings: LinkSettings) -> None:
+        self._phases = list(phases)
+        self._results = []
+        self._index = -1
+        self._settings = base_settings
+        self._active = True
+        self._next()
+
+    def cancel(self) -> None:
+        if self._active:
+            self._active = False
+            self.campaign.cancel()
+
+    def _next(self) -> None:
+        self._index += 1
+        if not self._active or self._index >= len(self._phases) or self._settings is None:
+            self._active = False
+            self.finished.emit(evaluate(self._results) if self._results else None)
+            return
+        phase = self._phases[self._index]
+        self.phase_started.emit(self._index, len(self._phases), phase)
+        self.campaign.start(phase.spec, self._settings)
+
+    def _on_progress(self, done: int, expected: int, elapsed: float, remaining: float) -> None:
+        if self._active:
+            self.progress.emit(done, expected, elapsed, remaining)
+
+    def _on_phase_finished(self, stats) -> None:
+        if not self._active and self._index < 0:
+            return
+        if 0 <= self._index < len(self._phases) and stats is not None:
+            self._results.append(PhaseResult(self._phases[self._index], stats))
+        if self._active:
+            QTimer.singleShot(300, self._next)  # laisser la liaison se rétablir entre deux phases
+        else:
+            self.finished.emit(evaluate(self._results) if self._results else None)
 
 
 def probe_request_for(slave_id: int, template: Request | None) -> Request:
