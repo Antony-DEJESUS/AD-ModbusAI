@@ -32,10 +32,22 @@ def test_build_matches_pymodbus_oracle():
     rm = pytest.importorskip("pymodbus.pdu.register_message")
     bm = pytest.importorskip("pymodbus.pdu.bit_message")
     cases = [
-        (Request(1, FC.READ_HOLDING_REGISTERS, 10, 4), rm.ReadHoldingRegistersRequest(address=10, count=4, dev_id=1)),
-        (Request(3, FC.WRITE_MULTIPLE_REGISTERS, 5, values=(1, 2)), rm.WriteMultipleRegistersRequest(address=5, registers=[1, 2], dev_id=3)),
-        (Request(3, FC.WRITE_MULTIPLE_COILS, 5, values=(1, 0, 1)), bm.WriteMultipleCoilsRequest(address=5, bits=[True, False, True], dev_id=3)),
-        (Request(1, FC.WRITE_SINGLE_COIL, 7, values=(1,)), bm.WriteSingleCoilRequest(address=7, bits=[True], dev_id=1)),
+        (
+            Request(1, FC.READ_HOLDING_REGISTERS, 10, 4),
+            rm.ReadHoldingRegistersRequest(address=10, count=4, dev_id=1),
+        ),
+        (
+            Request(3, FC.WRITE_MULTIPLE_REGISTERS, 5, values=(1, 2)),
+            rm.WriteMultipleRegistersRequest(address=5, registers=[1, 2], dev_id=3),
+        ),
+        (
+            Request(3, FC.WRITE_MULTIPLE_COILS, 5, values=(1, 0, 1)),
+            bm.WriteMultipleCoilsRequest(address=5, bits=[True, False, True], dev_id=3),
+        ),
+        (
+            Request(1, FC.WRITE_SINGLE_COIL, 7, values=(1,)),
+            bm.WriteSingleCoilRequest(address=7, bits=[True], dev_id=1),
+        ),
     ]
     for req, oracle in cases:
         assert build_pdu(req) == bytes([oracle.function_code]) + oracle.encode()

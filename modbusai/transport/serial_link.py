@@ -77,9 +77,12 @@ class SerialLink:
             ser.stopbits = _STOPBITS[float(s.stopbits)]
             ser.timeout = self._read_timeout_s
             ser.write_timeout = 1.0
-            if self.allow_tx:
-                ser.rts = False  # RTS bas au repos (monté pendant l'émission si rts_toggle)
-                ser.dtr = s.dtr
+            # pyserial monte RTS et DTR par défaut à l'ouverture : on les fixe
+            # explicitement. RTS reste bas au repos (monté pendant l'émission si
+            # rts_toggle) ; en mode passif les deux restent bas pour ne jamais
+            # activer l'émetteur d'un adaptateur RS-485.
+            ser.rts = False
+            ser.dtr = s.dtr if self.allow_tx else False
             ser.open()
             ser.reset_input_buffer()
             ser.reset_output_buffer()

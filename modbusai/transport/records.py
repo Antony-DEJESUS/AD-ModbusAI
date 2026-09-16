@@ -28,7 +28,7 @@ from datetime import datetime
 USB_GAP_FLOOR_MS = 5.0  # plancher pratique du silence de fin de trame (voir SerialSettings.frame_gap_ms)
 
 
-class Parity(str, enum.Enum):
+class Parity(enum.StrEnum):
     """Parité, valeurs alignées sur pyserial."""
 
     NONE = "N"

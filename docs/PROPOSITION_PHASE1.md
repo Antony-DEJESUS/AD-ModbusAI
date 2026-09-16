@@ -1,7 +1,18 @@
 # Proposition phase 1 — arborescence et couche transport
 
-Document à valider avant l'écriture de l'interface. Les dataclasses décrites ici
-existent déjà dans `modbusai/transport/records.py` et `modbusai/modbus/records.py`.
+Document validé (pile RTU en propre, paquet `modbusai`, interface FR seule en
+phase 1). Écarts entre cette proposition et le code livré :
+
+- pas de `ui/models/` ni de `ui/i18n.py` : la grille est un `QTableWidget`
+  alimenté directement, et l'interface est en français uniquement ;
+- le panneau droit (`ui/widgets/exchange_panel.py`) affiche le détail du
+  dernier échange à la place du logo de Modbus Doctor ; la console de log
+  occupe toute la largeur en bas ;
+- `SerialSettings.frame_gap_ms` s'ajoute à `t35_ms` (silence pratique vs
+  normatif, voir CLAUDE.md) ;
+- `ExchangeRecord.transaction_time_ms` s'ajoute à `response_time_ms`.
+
+L'arborescence à jour est dans `CLAUDE.md`.
 
 ## 1. Arborescence
 
