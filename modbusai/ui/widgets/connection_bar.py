@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButto
 
 from modbusai.i18n import LANGUAGES, tr
 from modbusai.transport.records import LinkSettings
+from modbusai.ui.resources import logo_pixmap
 
 
 class ConnectionBar(QFrame):
@@ -22,6 +23,8 @@ class ConnectionBar(QFrame):
         super().__init__(parent)
         self.setFrameShape(QFrame.Shape.StyledPanel)
 
+        self.logo = QLabel()
+        self.logo.setToolTip("AD Automation")
         self.config_btn = QPushButton(tr("CONFIGURATION"))
         self.protocol = QComboBox()
         self.protocol.addItem(tr("RTU"))
@@ -42,6 +45,7 @@ class ConnectionBar(QFrame):
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(6, 4, 6, 4)
+        layout.addWidget(self.logo)
         layout.addWidget(self.config_btn)
         layout.addWidget(self.protocol)
         layout.addWidget(self.summary)
@@ -83,7 +87,8 @@ class ConnectionBar(QFrame):
         return self.protocol.currentText()
 
     def set_theme(self, name: str) -> None:
-        self.theme_btn.setText("THÈME : SOMBRE" if name == "sombre" else "THÈME : CLAIR")
+        self.theme_btn.setText(tr("THÈME : SOMBRE") if name == "sombre" else tr("THÈME : CLAIR"))
+        self.logo.setPixmap(logo_pixmap(28, dark=(name == "sombre")))
 
     def set_connected(self, connected: bool) -> None:
         self.connect_btn.setEnabled(not connected)

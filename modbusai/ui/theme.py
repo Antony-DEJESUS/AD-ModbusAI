@@ -79,8 +79,11 @@ def light_palette() -> QPalette:
 
 
 def apply_theme(app: QApplication, name: str) -> str:
-    """Applique le thème et renvoie son nom normalisé."""
+    """Applique le thème (palette + feuille de style) et renvoie son nom normalisé."""
+    from modbusai.ui.style import build_qss
+
     name = name if name in THEMES else "clair"
     app.setStyle("Fusion")
     app.setPalette(dark_palette() if name == "sombre" else light_palette())
+    app.setStyleSheet(build_qss())
     return name

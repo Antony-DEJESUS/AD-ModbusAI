@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -122,10 +123,9 @@ class ScanPage(QWidget):
             cb.setChecked(True)
         sweep_layout = QVBoxLayout()
         sweep_layout.setContentsMargins(20, 0, 0, 0)
-        bauds_row = QHBoxLayout()
-        for cb in self.sweep_bauds.values():
-            bauds_row.addWidget(cb)
-        bauds_row.addStretch(1)
+        bauds_row = QGridLayout()
+        for i, cb in enumerate(self.sweep_bauds.values()):
+            bauds_row.addWidget(cb, i // 3, i % 3)
         fr_row = QHBoxLayout()
         for cb in self.sweep_framings.values():
             fr_row.addWidget(cb)
@@ -169,7 +169,8 @@ class ScanPage(QWidget):
         params_layout.addStretch(1)
         params = QGroupBox(tr("Paramètres du scan"))
         params.setLayout(params_layout)
-        params.setMaximumWidth(470)
+        params.setMinimumWidth(440)
+        params.setMaximumWidth(500)
 
         self.start_btn = QPushButton(tr("LANCER SCAN"))
         self.cancel_btn = QPushButton(tr("ARRÊTER"))

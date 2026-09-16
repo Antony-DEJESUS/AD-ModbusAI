@@ -7,9 +7,18 @@ et lance / arrête les threads espion et esclave à la demande des pages.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings, QThread, QTimer, Signal
+from PySide6.QtCore import QSettings, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QMessageBox, QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from modbusai import APP_TITLE
 from modbusai.analysis.campaign import CampaignSpec
@@ -24,8 +33,10 @@ from modbusai.ui.pages.master_page import MasterPage
 from modbusai.ui.pages.scan_page import ScanPage
 from modbusai.ui.pages.slave_page import SlavePage
 from modbusai.ui.pages.sniffer_page import SnifferPage
+from modbusai.ui.resources import app_icon
 from modbusai.ui.roles import Role, Tab, tab_states
 from modbusai.ui.theme import THEMES, apply_theme, system_theme
+from modbusai.ui.widgets.about_dialog import AUTHOR, AboutDialog
 from modbusai.ui.widgets.config_dialog import ConfigDialog
 from modbusai.ui.widgets.connection_bar import ConnectionBar
 from modbusai.ui.workers import ExecuteJob, ModbusWorker, SlaveWorker, SnifferWorker, TcpSlaveWorker
@@ -72,6 +83,13 @@ class MainWindow(QMainWindow):
         ):
             self._tab_index[tab] = self.tabs.addTab(page, tr(tab.value))
         self.status_label = QLabel(tr("Status : déconnecté"))
+        credit = tr("Fait avec Claude Code par {p0}").format(p0=AUTHOR)
+        self.credit_label = QLabel(f"<a href='about' style='color: inherit; text-decoration: none;'>{credit}</a>")
+        self.credit_label.setObjectName("credit")
+        self.credit_label.setToolTip(tr("À propos : logo, version, historique, mode d'emploi"))
+        self.credit_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.credit_label.linkActivated.connect(lambda _href: self._show_about())
+        self.setWindowIcon(app_icon())
 
         central = QWidget()
         layout = QVBoxLayout(central)
@@ -79,7 +97,10 @@ class MainWindow(QMainWindow):
         layout.setSpacing(4)
         layout.addWidget(self.connection_bar)
         layout.addWidget(self.tabs, 1)
-        layout.addWidget(self.status_label)
+        footer = QHBoxLayout()
+        footer.addWidget(self.status_label, 1)
+        footer.addWidget(self.credit_label)
+        layout.addLayout(footer)
         self.setCentralWidget(central)
 
         # ------------------------------------------------------------- worker
@@ -181,6 +202,9 @@ class MainWindow(QMainWindow):
         set_language(lang)
         QSettings().setValue("ui/language", lang)
         self.relaunch_requested.emit()
+
+    def _show_about(self) -> None:
+        AboutDialog(dark=(self._theme == "sombre"), parent=self).exec()
 
     # ================================================================ thème
     def _apply_saved_theme(self) -> None:

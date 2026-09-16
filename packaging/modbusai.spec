@@ -3,7 +3,7 @@
 
 Depuis la racine du dépôt :
     pyinstaller packaging/modbusai.spec
-Résultat : dist/ModbusAI_v0.1.0.exe (Windows).
+Résultat : dist/ModbusAI_v<version>.exe (Windows), avec le logo AD Automation en icône.
 """
 
 import re
@@ -17,7 +17,12 @@ a = Analysis(
     [str(ROOT / "main.py")],
     pathex=[str(ROOT)],
     binaries=[],
-    datas=[],
+    # Logo, icône et historique lus à l'exécution via modbusai.ui.resources
+    datas=[
+        (str(ROOT / "assets" / "*.png"), "assets"),
+        (str(ROOT / "assets" / "modbusai.ico"), "assets"),
+        (str(ROOT / "CHANGELOG.md"), "."),
+    ],
     hiddenimports=["serial.tools.list_ports"],
     hookspath=[],
     runtime_hooks=[],
@@ -38,4 +43,5 @@ exe = EXE(
     upx=False,
     console=False,
     disable_windowed_traceback=False,
+    icon=str(ROOT / "assets" / "modbusai.ico"),
 )
