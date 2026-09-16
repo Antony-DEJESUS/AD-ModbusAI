@@ -73,3 +73,10 @@ class ExchangeRecord:
     @property
     def ok(self) -> bool:
         return self.status is ExchangeStatus.OK
+
+    @property
+    def transaction_time_ms(self) -> float | None:
+        """Début d'émission -> dernier octet reçu (temps de transaction complet)."""
+        if self.rx_frame is None:
+            return None
+        return (self.rx_frame.t_last_ns - self.tx_frame.t_first_ns) / 1_000_000

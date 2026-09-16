@@ -1,0 +1,164 @@
+"""Construction des requêtes RTU et décodage des réponses (FC 01..04, 05, 06, 15, 16).
+
+Pur : octets en entrée, octets ou valeurs en sortie. Aucun accès série.
+"""
+
+from __future__ import annotations
+
+from modbusai.modbus.crc import append_crc, check_crc
+from modbusai.modbus.exceptions import BadResponse, CrcError, ModbusException
+from modbusai.modbus.records import FunctionCode, Request
+
+READ_BITS = (FunctionCode.READ_COILS, FunctionCode.READ_DISCRETE_INPUTS)
+READ_REGISTERS = (FunctionCode.READ_HOLDING_REGISTERS, FunctionCode.READ_INPUT_REGISTERS)
+WRITE_FUNCTIONS = (
+    FunctionCode.WRITE_SINGLE_COIL,
+    FunctionCode.WRITE_SINGLE_REGISTER,
+    FunctionCode.WRITE_MULTIPLE_COILS,
+    FunctionCode.WRITE_MULTIPLE_REGISTERS,
+)
+
+MAX_READ_BITS = 2000
+MAX_READ_REGISTERS = 125
+MAX_WRITE_BITS = 1968
+MAX_WRITE_REGISTERS = 123
+
+
+def validate_request(req: Request) -> None:
+    """Lève ValueError si la requête est hors bornes protocole."""
+    if not 0 <= req.slave_id <= 247:
+        raise ValueError("N° esclave hors plage (0..247)")
+    if not 0 <= req.address <= 0xFFFF:
+        raise ValueError("Adresse hors plage (0..65535)")
+    fc = req.function
+    if fc in READ_BITS:
+        if not 1 <= req.count <= MAX_READ_BITS:
+            raise ValueError(f"Longueur hors plage (1..{MAX_READ_BITS})")
+    elif fc in READ_REGISTERS:
+        if not 1 <= req.count <= MAX_READ_REGISTERS:
+            raise ValueError(f"Longueur hors plage (1..{MAX_READ_REGISTERS})")
+    elif fc is FunctionCode.WRITE_SINGLE_COIL:
+        if len(req.values) != 1:
+            raise ValueError("FC05 : une seule valeur attendue")
+    elif fc is FunctionCode.WRITE_SINGLE_REGISTER:
+        if len(req.values) != 1 or not 0 <= req.values[0] <= 0xFFFF:
+            raise ValueError("FC06 : une valeur 0..65535 attendue")
+    elif fc is FunctionCode.WRITE_MULTIPLE_COILS:
+        if not 1 <= len(req.values) <= MAX_WRITE_BITS:
+            raise ValueError(f"FC15 : 1..{MAX_WRITE_BITS} valeurs attendues")
+    elif fc is FunctionCode.WRITE_MULTIPLE_REGISTERS:
+        if not 1 <= len(req.values) <= MAX_WRITE_REGISTERS:
+            raise ValueError(f"FC16 : 1..{MAX_WRITE_REGISTERS} valeurs attendues")
+        if any(not 0 <= v <= 0xFFFF for v in req.values):
+            raise ValueError("FC16 : valeurs 0..65535 attendues")
+    if req.address + max(req.count, len(req.values), 1) > 0x10000:
+        raise ValueError("Adresse + longueur dépasse 65535")
+
+
+def pack_bits(values: tuple[int, ...]) -> bytes:
+    """Bits -> octets, LSB en premier (ordre Modbus)."""
+    out = bytearray((len(values) + 7) // 8)
+    for i, v in enumerate(values):
+        if v:
+            out[i // 8] |= 1 << (i % 8)
+    return bytes(out)
+
+
+def unpack_bits(data: bytes, count: int) -> tuple[int, ...]:
+    return tuple((data[i // 8] >> (i % 8)) & 1 for i in range(count))
+
+
+def build_pdu(req: Request) -> bytes:
+    """PDU (code fonction + données), sans adresse esclave ni CRC."""
+    validate_request(req)
+    fc = req.function
+    if fc in READ_BITS or fc in READ_REGISTERS:
+        return bytes([fc]) + req.address.to_bytes(2, "big") + req.count.to_bytes(2, "big")
+    if fc is FunctionCode.WRITE_SINGLE_COIL:
+        return bytes([fc]) + req.address.to_bytes(2, "big") + (b"\xff\x00" if req.values[0] else b"\x00\x00")
+    if fc is FunctionCode.WRITE_SINGLE_REGISTER:
+        return bytes([fc]) + req.address.to_bytes(2, "big") + req.values[0].to_bytes(2, "big")
+    if fc is FunctionCode.WRITE_MULTIPLE_COILS:
+        payload = pack_bits(req.values)
+        return (
+            bytes([fc])
+            + req.address.to_bytes(2, "big")
+            + len(req.values).to_bytes(2, "big")
+            + bytes([len(payload)])
+            + payload
+        )
+    if fc is FunctionCode.WRITE_MULTIPLE_REGISTERS:
+        payload = b"".join(v.to_bytes(2, "big") for v in req.values)
+        return (
+            bytes([fc])
+            + req.address.to_bytes(2, "big")
+            + len(req.values).to_bytes(2, "big")
+            + bytes([len(payload)])
+            + payload
+        )
+    raise ValueError(f"Code fonction non géré : {fc}")
+
+
+def build_adu(req: Request) -> bytes:
+    """Trame RTU complète : esclave + PDU + CRC."""
+    return append_crc(bytes([req.slave_id]) + build_pdu(req))
+
+
+def expected_response_length(req: Request) -> int:
+    """Longueur attendue de la réponse normale (esclave + PDU + CRC)."""
+    fc = req.function
+    if fc in READ_BITS:
+        return 5 + (req.count + 7) // 8
+    if fc in READ_REGISTERS:
+        return 5 + 2 * req.count
+    return 8  # écritures : écho de 8 octets
+
+
+def parse_response(req: Request, adu: bytes) -> tuple[int, ...]:
+    """Décode la réponse à ``req``.
+
+    Renvoie les valeurs lues (registres 16 bits ou bits 0/1) ; tuple vide pour
+    une écriture acquittée. Lève ``CrcError``, ``ModbusException`` ou
+    ``BadResponse``.
+    """
+    if len(adu) < 5 or not check_crc(adu):
+        # Une réponse d'exception fait 5 octets ; en dessous, le CRC ne peut être bon.
+        raise CrcError(adu)
+    slave, fc = adu[0], adu[1]
+    body = adu[2:-2]
+    if slave != req.slave_id:
+        raise BadResponse(f"Réponse de l'esclave {slave} au lieu de {req.slave_id}")
+    if fc == (req.function | 0x80):
+        if len(body) != 1:
+            raise BadResponse("Trame d'exception de longueur incorrecte")
+        raise ModbusException(req.function, body[0])
+    if fc != req.function:
+        raise BadResponse(f"Code fonction {fc:02X} au lieu de {req.function:02X}")
+
+    if req.function in READ_BITS:
+        nbytes = (req.count + 7) // 8
+        if len(body) != 1 + nbytes or body[0] != nbytes:
+            raise BadResponse(f"Longueur de données {len(body) - 1} au lieu de {nbytes}")
+        return unpack_bits(body[1:], req.count)
+    if req.function in READ_REGISTERS:
+        nbytes = 2 * req.count
+        if len(body) != 1 + nbytes or body[0] != nbytes:
+            raise BadResponse(f"Longueur de données {max(len(body) - 1, 0)} au lieu de {nbytes}")
+        return tuple(int.from_bytes(body[i : i + 2], "big") for i in range(1, len(body), 2))
+
+    # Écritures : l'esclave renvoie l'écho de l'adresse et de la valeur / quantité.
+    if len(body) != 4:
+        raise BadResponse("Acquittement d'écriture de longueur incorrecte")
+    addr = int.from_bytes(body[0:2], "big")
+    tail = int.from_bytes(body[2:4], "big")
+    if addr != req.address:
+        raise BadResponse(f"Adresse acquittée {addr} au lieu de {req.address}")
+    if req.function is FunctionCode.WRITE_SINGLE_COIL:
+        expected = 0xFF00 if req.values[0] else 0x0000
+    elif req.function is FunctionCode.WRITE_SINGLE_REGISTER:
+        expected = req.values[0]
+    else:
+        expected = len(req.values)
+    if tail != expected:
+        raise BadResponse(f"Valeur acquittée 0x{tail:04X} au lieu de 0x{expected:04X}")
+    return ()

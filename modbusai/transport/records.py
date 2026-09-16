@@ -25,6 +25,8 @@ import enum
 from dataclasses import dataclass, field
 from datetime import datetime
 
+USB_GAP_FLOOR_MS = 5.0  # plancher pratique du silence de fin de trame (voir SerialSettings.frame_gap_ms)
+
 
 class Parity(str, enum.Enum):
     """Parité, valeurs alignées sur pyserial."""
@@ -92,6 +94,20 @@ class SerialSettings:
         if self.baudrate > 19200:
             return 0.75
         return 1.5 * self.char_time_ms
+
+    @property
+    def frame_gap_ms(self) -> float:
+        """Silence utilisé en pratique pour déclarer une trame terminée.
+
+        Les adaptateurs USB/RS-485 remontent les octets par paquets (latence
+        1 à 16 ms) : appliquer strictement T3.5 à 115200 bauds (1,75 ms)
+        couperait une réponse en plusieurs trames. Sans saisie utilisateur, on
+        prend donc max(T3.5, USB_GAP_FLOOR_MS). La valeur normative reste
+        disponible via ``t35_ms`` pour le futur diagnostic.
+        """
+        if self.inter_frame_delay_ms is not None:
+            return self.inter_frame_delay_ms
+        return max(self.t35_ms, USB_GAP_FLOOR_MS)
 
     def summary(self) -> str:
         """Ex. : ``COM4 : 19200,8,None,One`` (barre de titre, façon Modbus Doctor)."""
