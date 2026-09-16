@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QMessageBox, QT
 from modbusai import APP_TITLE
 from modbusai.analysis.campaign import CampaignSpec
 from modbusai.analysis.session import SessionStore
+from modbusai.i18n import current_language, set_language, tr
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus
 from modbusai.modbus.slave import DataStore, SlaveConfig
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
@@ -36,6 +37,7 @@ class MainWindow(QMainWindow):
     _cmd_open = Signal(object)
     _cmd_close = Signal()
     _cmd_execute = Signal(object)
+    relaunch_requested = Signal()  # changement de langue : l'application recrée la fenêtre
 
     def __init__(self) -> None:
         super().__init__()
@@ -68,8 +70,8 @@ class MainWindow(QMainWindow):
             (Tab.DIAGNOSTIC, self.diagnostic_page),
             (Tab.SLAVE, self.slave_page),
         ):
-            self._tab_index[tab] = self.tabs.addTab(page, tab.value)
-        self.status_label = QLabel("Status : déconnecté")
+            self._tab_index[tab] = self.tabs.addTab(page, tr(tab.value))
+        self.status_label = QLabel(tr("Status : déconnecté"))
 
         central = QWidget()
         layout = QVBoxLayout(central)
@@ -113,6 +115,8 @@ class MainWindow(QMainWindow):
         self.connection_bar.quit_requested.connect(self.close)
         self.connection_bar.theme_toggled.connect(self._toggle_theme)
         self.connection_bar.protocol_changed.connect(self._on_protocol_changed)
+        self.connection_bar.language_changed.connect(self._on_language_changed)
+        self.connection_bar.set_language(current_language())
 
         self.master_page.execute_requested.connect(self._cmd_execute)
         self.master_page.status_message.connect(self._set_status)
@@ -167,6 +171,17 @@ class MainWindow(QMainWindow):
         self._save_settings()
         self._update_availability()
 
+    def _on_language_changed(self, lang: str) -> None:
+        if lang == current_language():
+            return
+        if self._role is not Role.IDLE or self._busy_tab() is not None:
+            self.connection_bar.set_language(current_language())
+            self._set_status(tr("Déconnectez-vous et arrêtez les activités avant de changer de langue."))
+            return
+        set_language(lang)
+        QSettings().setValue("ui/language", lang)
+        self.relaunch_requested.emit()
+
     # ================================================================ thème
     def _apply_saved_theme(self) -> None:
         app = QApplication.instance()
@@ -195,18 +210,18 @@ class MainWindow(QMainWindow):
         if not self._target_defined():
             return
         if self._role in (Role.SNIFFER, Role.SLAVE):
-            self._set_status("Arrêtez d'abord l'espion ou le serveur esclave : le port est occupé.")
+            self._set_status(tr("Arrêtez d'abord l'espion ou le serveur esclave : le port est occupé."))
             return
         self._manual_disconnect = False
-        self._set_status(f"Ouverture de {self._settings.summary()}…")
+        self._set_status(tr("Ouverture de {p0}…").format(p0=self._settings.summary()))
         self._cmd_open.emit(self._settings)
 
     def _target_defined(self) -> bool:
         if self._is_tcp and not self._tcp_settings.host:
-            QMessageBox.warning(self, APP_TITLE, "Renseignez l'hôte dans CONFIGURATION.")
+            QMessageBox.warning(self, APP_TITLE, tr("Renseignez l'hôte dans CONFIGURATION."))
             return False
         if not self._is_tcp and not self._serial_settings.port:
-            QMessageBox.warning(self, APP_TITLE, "Choisissez un port dans CONFIGURATION.")
+            QMessageBox.warning(self, APP_TITLE, tr("Choisissez un port dans CONFIGURATION."))
             return False
         return True
 
@@ -230,7 +245,7 @@ class MainWindow(QMainWindow):
         detail = f"timeout {settings.response_timeout_ms:g} ms"
         if isinstance(settings, SerialSettings):
             detail += f", silence fin de trame {settings.frame_gap_ms:.2f} ms"
-        self._set_status(f"Connecté : {settings.summary()} ({detail})")
+        self._set_status(tr("Connecté : {p0} ({p1})").format(p0=settings.summary(), p1=detail))
         self.master_page.on_connected(settings.summary())
         self._update_availability()
         pending, self._pending_after_connect = self._pending_after_connect, None
@@ -243,7 +258,7 @@ class MainWindow(QMainWindow):
             self._role = Role.IDLE
         self.connection_bar.set_connected(False)
         self.connection_bar.show_settings(self._settings)
-        self._set_status("Status : déconnecté")
+        self._set_status(tr("Status : déconnecté"))
         self.master_page.on_disconnected(manual=self._manual_disconnect)
         self._update_availability()
 
@@ -270,7 +285,7 @@ class MainWindow(QMainWindow):
         if not self.master_page.auto_reconnect or self._reconnect_pending or self._manual_disconnect:
             return
         self._reconnect_pending = True
-        self._set_status(f"Reconnexion automatique dans {RECONNECT_DELAY_MS / 1000:.1f} s…")
+        self._set_status(tr("Reconnexion automatique dans {p0:.1f} s…").format(p0=RECONNECT_DELAY_MS / 1000))
         QTimer.singleShot(RECONNECT_DELAY_MS, self._try_reconnect)
 
     def _try_reconnect(self) -> None:
@@ -295,10 +310,10 @@ class MainWindow(QMainWindow):
     # ================================================================= scan
     def _start_scan(self, _plan) -> None:
         if not self._connected or self._role is not Role.MASTER:
-            self._set_status("Le scan utilise la liaison du maître : cliquez d'abord sur CONNEXION.")
+            self._set_status(tr("Le scan utilise la liaison du maître : cliquez d'abord sur CONNEXION."))
             return
         if self.campaign_ctl.active:
-            self._set_status("Un test de diagnostic est en cours.")
+            self._set_status(tr("Un test de diagnostic est en cours."))
             return
         plan = self.scan_page.plan(self._settings)
         self.scan_page.on_started(plan)
@@ -321,19 +336,19 @@ class MainWindow(QMainWindow):
         if self._connected and self._role is Role.MASTER:
             return True
         if self._role is not Role.IDLE:
-            self._set_status("Arrêtez l'espion ou le serveur esclave : le port est occupé.")
+            self._set_status(tr("Arrêtez l'espion ou le serveur esclave : le port est occupé."))
             return False
         if not self._target_defined():
             return False
         self._pending_after_connect = then
         self._manual_disconnect = False
-        self._set_status(f"Ouverture de {self._settings.summary()} pour le diagnostic…")
+        self._set_status(tr("Ouverture de {p0} pour le diagnostic…").format(p0=self._settings.summary()))
         self._cmd_open.emit(self._settings)
         return False
 
     def _start_campaign(self, spec: CampaignSpec) -> None:
         if self.scan_ctl.active or self.campaign_ctl.active or self.stress_ctl.active:
-            self._set_status("Un scan ou une campagne est déjà en cours.")
+            self._set_status(tr("Un scan ou une campagne est déjà en cours."))
             return
         if not self._ensure_master_link(lambda: self._start_campaign(spec)):
             return
@@ -344,7 +359,7 @@ class MainWindow(QMainWindow):
 
     def _start_stress(self, phases) -> None:
         if self.scan_ctl.active or self.campaign_ctl.active or self.stress_ctl.active:
-            self._set_status("Un scan ou une campagne est déjà en cours.")
+            self._set_status(tr("Un scan ou une campagne est déjà en cours."))
             return
         if not self._ensure_master_link(lambda: self._start_stress(phases)):
             return
@@ -374,12 +389,12 @@ class MainWindow(QMainWindow):
     # =============================================================== espion
     def _start_sniffer(self) -> None:
         if self._is_tcp:
-            self._set_status("Le mode espion n'existe qu'en RTU : passez le protocole sur RTU.")
+            self._set_status(tr("Le mode espion n'existe qu'en RTU : passez le protocole sur RTU."))
             return
         if not self._target_defined():
             return
         if self._role is Role.SLAVE:
-            self._set_status("Arrêtez le serveur esclave avant de lancer l'écoute.")
+            self._set_status(tr("Arrêtez le serveur esclave avant de lancer l'écoute."))
             return
         if self._role is Role.MASTER:
             self._manual_disconnect = True
@@ -400,8 +415,8 @@ class MainWindow(QMainWindow):
             self._sniffer.stop()
 
     def _on_transactions(self, transactions) -> None:
-        for tr in transactions:
-            self.session.add_transaction(tr, self._settings)
+        for transaction in transactions:
+            self.session.add_transaction(transaction, self._settings)
         self.sniffer_page.on_transactions(transactions)
 
     def _on_sniffer_stopped(self) -> None:
@@ -410,7 +425,7 @@ class MainWindow(QMainWindow):
             self._sniffer = None
         self._role = Role.IDLE
         self.sniffer_page.on_stopped()
-        self._set_status("Écoute arrêtée. Cliquez sur CONNEXION pour repasser en maître.")
+        self._set_status(tr("Écoute arrêtée. Cliquez sur CONNEXION pour repasser en maître."))
         self._update_availability()
 
     def _on_passive_error(self, message: str) -> None:
@@ -422,7 +437,7 @@ class MainWindow(QMainWindow):
         if not self._is_tcp and not self._target_defined():
             return
         if self._role is Role.SNIFFER:
-            self._set_status("Arrêtez l'écoute avant de lancer le serveur esclave.")
+            self._set_status(tr("Arrêtez l'écoute avant de lancer le serveur esclave."))
             return
         if self._role is Role.MASTER:
             self._manual_disconnect = True
@@ -453,7 +468,7 @@ class MainWindow(QMainWindow):
             self._slave = None
         self._role = Role.IDLE
         self.slave_page.on_stopped()
-        self._set_status("Serveur esclave arrêté. Cliquez sur CONNEXION pour repasser en maître.")
+        self._set_status(tr("Serveur esclave arrêté. Cliquez sur CONNEXION pour repasser en maître."))
         self._update_availability()
 
     def _on_slave_error(self, message: str) -> None:

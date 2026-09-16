@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modbusai.i18n import tr
 from modbusai.modbus.codec import Radix, format_int, parse_int
 from modbusai.modbus.slave import TABLE_SIZE, DataStore, HandledRequest, SlaveConfig, Table
 from modbusai.transport.records import LinkSettings
@@ -186,26 +187,26 @@ class SlavePage(QWidget):
         # ---------------------------------------------------------- serveur
         self.slave_ids = QLineEdit("1")
         self.slave_ids.setMaximumWidth(140)
-        self.slave_ids.setToolTip("Adresses servies, ex. « 1-5, 10 »")
+        self.slave_ids.setToolTip(tr("Adresses servies, ex. « 1-5, 10 »"))
         self.delay = QSpinBox()
         self.delay.setRange(0, 5000)
         self.delay.setSuffix(" ms")
-        self.delay.setToolTip("Délai avant chaque réponse (simule un esclave lent)")
+        self.delay.setToolTip(tr("Délai avant chaque réponse (simule un esclave lent)"))
         self.drop = QSpinBox()
         self.drop.setRange(0, 100)
         self.drop.setSuffix(" %")
-        self.drop.setToolTip("Part des requêtes volontairement ignorées (simule des timeouts)")
+        self.drop.setToolTip(tr("Part des requêtes volontairement ignorées (simule des timeouts)"))
         self.corrupt = QSpinBox()
         self.corrupt.setRange(0, 100)
         self.corrupt.setSuffix(" %")
-        self.corrupt.setToolTip("Part des réponses au CRC volontairement faux (simule du bruit)")
-        self.read_only = QCheckBox("Lecture seule")
-        self.start_btn = QPushButton("DÉMARRER SERVEUR")
-        self.stop_btn = QPushButton("ARRÊTER")
+        self.corrupt.setToolTip(tr("Part des réponses au CRC volontairement faux (simule du bruit)"))
+        self.read_only = QCheckBox(tr("Lecture seule"))
+        self.start_btn = QPushButton(tr("DÉMARRER SERVEUR"))
+        self.stop_btn = QPushButton(tr("ARRÊTER"))
         self.stop_btn.setEnabled(False)
-        self.rx_led = Led("RX", "#2ea043")
-        self.tx_led = Led("TX", "#e5534b")
-        self.counters_label = QLabel("Serveur arrêté")
+        self.rx_led = Led(tr("RX"), "#2ea043")
+        self.tx_led = Led(tr("TX"), "#e5534b")
+        self.counters_label = QLabel(tr("Serveur arrêté"))
 
         server_row = QHBoxLayout()
         for label, w in (
@@ -229,11 +230,11 @@ class SlavePage(QWidget):
         # ------------------------------------------------------------ table
         self.table_kind = QComboBox()
         for t in Table:
-            self.table_kind.addItem(t.label, t)
+            self.table_kind.addItem(tr(t.label), t)
         self.table_kind.setCurrentIndex(list(Table).index(Table.HOLDING_REGISTERS))
         self.fmt = QComboBox()
         for f in CellFormat:
-            self.fmt.addItem(f.label, f)
+            self.fmt.addItem(tr(f.label), f)
         self.start = QSpinBox()
         self.start.setRange(0, TABLE_SIZE - COLUMNS)
         self.start.setSingleStep(COLUMNS)
@@ -242,12 +243,12 @@ class SlavePage(QWidget):
         self.rows.setValue(100)
         self.fill_value = QSpinBox()
         self.fill_value.setRange(0, 65535)
-        self.fill_btn = QPushButton("REMPLIR la plage visible")
-        self.zero_btn = QPushButton("RAZ table")
+        self.fill_btn = QPushButton(tr("REMPLIR la plage visible"))
+        self.zero_btn = QPushButton(tr("RAZ table"))
         self.animation = QComboBox()
-        self.animation.addItem("Aucune animation", "none")
-        self.animation.addItem("Incrémenter la plage visible", "inc")
-        self.animation.addItem("Incrémenter de 10", "inc10")
+        self.animation.addItem(tr("Aucune animation"), "none")
+        self.animation.addItem(tr("Incrémenter la plage visible"), "inc")
+        self.animation.addItem(tr("Incrémenter de 10"), "inc10")
         self.anim_period = QSpinBox()
         self.anim_period.setRange(100, 60000)
         self.anim_period.setValue(1000)
@@ -263,7 +264,7 @@ class SlavePage(QWidget):
             table_row.addWidget(QLabel(label))
             table_row.addWidget(w)
         table_row.addSpacing(12)
-        table_row.addWidget(QLabel("Valeur"))
+        table_row.addWidget(QLabel(tr("Valeur")))
         table_row.addWidget(self.fill_value)
         table_row.addWidget(self.fill_btn)
         table_row.addWidget(self.zero_btn)
@@ -279,7 +280,7 @@ class SlavePage(QWidget):
         self.view.setAlternatingRowColors(False)
 
         self.log_panel = LogPanel()
-        self.log_enabled = QCheckBox("Journaliser les requêtes")
+        self.log_enabled = QCheckBox(tr("Journaliser les requêtes"))
         self.log_enabled.setChecked(True)
         log_head = QHBoxLayout()
         log_head.addWidget(self.log_enabled)
@@ -318,7 +319,9 @@ class SlavePage(QWidget):
         self.zero_btn.clicked.connect(self._zero)
         self.animation.currentIndexChanged.connect(lambda _i: self._update_animation())
         self.anim_period.valueChanged.connect(lambda _v: self._update_animation())
-        self.log_panel.copied.connect(lambda n: self.status_message.emit(f"Journal esclave copié ({n} lignes)"))
+        self.log_panel.copied.connect(
+            lambda n: self.status_message.emit(tr("Journal esclave copié ({p0} lignes)").format(p0=n))
+        )
 
         self._refresh_timer = QTimer(self)
         self._refresh_timer.timeout.connect(self.model.refresh_if_changed)
@@ -352,11 +355,11 @@ class SlavePage(QWidget):
         self.stop_btn.setEnabled(True)
         for w in (self.slave_ids, self.delay, self.drop, self.corrupt, self.read_only):
             w.setEnabled(False)
-        self.counters_label.setText(f"Serveur actif sur {settings.summary()}")
+        self.counters_label.setText(tr("Serveur actif sur {p0}").format(p0=settings.summary()))
         self.log_panel.console.log_info(
             f"Serveur esclave démarré sur {settings.summary()} - adresses {self.slave_ids.text()}"
         )
-        self.status_message.emit(f"Serveur esclave actif sur {settings.summary()}")
+        self.status_message.emit(tr("Serveur esclave actif sur {p0}").format(p0=settings.summary()))
 
     def on_stopped(self) -> None:
         self._serving = False
@@ -364,8 +367,8 @@ class SlavePage(QWidget):
         self.stop_btn.setEnabled(False)
         for w in (self.slave_ids, self.delay, self.drop, self.corrupt, self.read_only):
             w.setEnabled(True)
-        self.counters_label.setText("Serveur arrêté")
-        self.log_panel.console.log_info("Serveur esclave arrêté")
+        self.counters_label.setText(tr("Serveur arrêté"))
+        self.log_panel.console.log_info(tr("Serveur esclave arrêté"))
 
     def set_available(self, available: bool) -> None:
         self.start_btn.setEnabled(available and not self._serving)
@@ -391,7 +394,9 @@ class SlavePage(QWidget):
         resp = result.response.hex(" ").upper() if result.response is not None else "-"
         who = f"Esc {result.slave_id}" if result.slave_id is not None else "?"
         fc = f"FC{result.function:02X}" if result.function is not None else ""
-        line = f"{who:<8}{fc:<6} RX {req}  TX {resp}  {result.kind}" + (f" ({result.detail})" if result.detail else "")
+        line = f"{who:<8}{fc:<6} RX {req}  TX {resp}  {tr(result.kind)}" + (
+            f" ({result.detail})" if result.detail else ""
+        )
         if result.kind in ("réponse", "broadcast"):
             console.log_info(line)
         else:

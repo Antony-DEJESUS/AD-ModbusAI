@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from modbusai.analysis.scanner import COMMON_BAUDRATES, ScanPlan, ScanResult, ScanStatus
+from modbusai.i18n import tr
 from modbusai.modbus.records import FunctionCode
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings
 from modbusai.ui.widgets.config_dialog import BAUDRATES
@@ -78,14 +79,14 @@ class ScanPage(QWidget):
         self.retries = QSpinBox()
         self.retries.setRange(0, 5)
         self.retries.setValue(1)
-        self.identify = QCheckBox("Identifier les équipements (FC43, FC17)")
+        self.identify = QCheckBox(tr("Identifier les équipements (FC43, FC17)"))
         self.identify.setChecked(True)
-        self.show_absent = QCheckBox("Afficher les adresses absentes")
+        self.show_absent = QCheckBox(tr("Afficher les adresses absentes"))
 
         # ---- liaison utilisée par le scan
-        self.link_current = QRadioButton("Paramètres courants (bandeau)")
-        self.link_custom = QRadioButton("Paramètres personnalisés")
-        self.link_sweep = QRadioButton("Balayer plusieurs paramètres (long)")
+        self.link_current = QRadioButton(tr("Paramètres courants (bandeau)"))
+        self.link_custom = QRadioButton(tr("Paramètres personnalisés"))
+        self.link_sweep = QRadioButton(tr("Balayer plusieurs paramètres (long)"))
         self.link_current.setChecked(True)
         link_group = QButtonGroup(self)
         for r in (self.link_current, self.link_custom, self.link_sweep):
@@ -112,10 +113,10 @@ class ScanPage(QWidget):
         for b in COMMON_BAUDRATES:
             self.sweep_bauds[b].setChecked(True)
         self.sweep_framings = {
-            (Parity.NONE, 1.0): QCheckBox("8N1"),
-            (Parity.EVEN, 1.0): QCheckBox("8E1"),
-            (Parity.ODD, 1.0): QCheckBox("8O1"),
-            (Parity.NONE, 2.0): QCheckBox("8N2"),
+            (Parity.NONE, 1.0): QCheckBox(tr("8N1")),
+            (Parity.EVEN, 1.0): QCheckBox(tr("8E1")),
+            (Parity.ODD, 1.0): QCheckBox(tr("8O1")),
+            (Parity.NONE, 2.0): QCheckBox(tr("8N2")),
         }
         for cb in self.sweep_framings.values():
             cb.setChecked(True)
@@ -141,17 +142,17 @@ class ScanPage(QWidget):
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         rng = QHBoxLayout()
         rng.addWidget(self.first)
-        rng.addWidget(QLabel("à"))
+        rng.addWidget(QLabel(tr("à")))
         rng.addWidget(self.last)
         rng.addStretch(1)
         rng_w = QWidget()
         rng_w.setLayout(rng)
-        form.addRow("Esclaves de", rng_w)
-        form.addRow("Type lu", self.function)
-        form.addRow("Registre", self.address)
-        form.addRow("Longueur", self.count)
-        form.addRow("Timeout par essai", self.timeout)
-        form.addRow("Essais supplémentaires", self.retries)
+        form.addRow(tr("Esclaves de"), rng_w)
+        form.addRow(tr("Type lu"), self.function)
+        form.addRow(tr("Registre"), self.address)
+        form.addRow(tr("Longueur"), self.count)
+        form.addRow(tr("Timeout par essai"), self.timeout)
+        form.addRow(tr("Essais supplémentaires"), self.retries)
         form.addRow("", self.identify)
         link_layout = QVBoxLayout()
         link_layout.addWidget(self.link_current)
@@ -160,24 +161,24 @@ class ScanPage(QWidget):
         link_layout.addWidget(self.link_sweep)
         link_layout.addWidget(self.sweep_widget)
         link_layout.addWidget(self.link_hint)
-        self.link_box = QGroupBox("Liaison du scan")
+        self.link_box = QGroupBox(tr("Liaison du scan"))
         self.link_box.setLayout(link_layout)
         params_layout = QVBoxLayout()
         params_layout.addLayout(form)
         params_layout.addWidget(self.link_box)
         params_layout.addStretch(1)
-        params = QGroupBox("Paramètres du scan")
+        params = QGroupBox(tr("Paramètres du scan"))
         params.setLayout(params_layout)
         params.setMaximumWidth(470)
 
-        self.start_btn = QPushButton("LANCER SCAN")
-        self.cancel_btn = QPushButton("ARRÊTER")
+        self.start_btn = QPushButton(tr("LANCER SCAN"))
+        self.cancel_btn = QPushButton(tr("ARRÊTER"))
         self.cancel_btn.setEnabled(False)
-        self.clear_btn = QPushButton("EFFACER")
-        self.copy_btn = QPushButton("COPIER")
+        self.clear_btn = QPushButton(tr("EFFACER"))
+        self.copy_btn = QPushButton(tr("COPIER"))
         self.progress = QProgressBar()
         self.progress.setTextVisible(True)
-        self.progress_label = QLabel("Prêt. Le scan utilise la liaison du maître : connectez-vous d'abord.")
+        self.progress_label = QLabel(tr("Prêt. Le scan utilise la liaison du maître : connectez-vous d'abord."))
         self.summary = QLabel("")
         self.summary.setStyleSheet("font-weight: bold;")
 
@@ -190,7 +191,9 @@ class ScanPage(QWidget):
         buttons.addWidget(self.show_absent)
 
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["Esclave", "Statut", "Temps (ms)", "Liaison", "Détail", "Identification"])
+        self.table.setHorizontalHeaderLabels(
+            [tr("Esclave"), tr("Statut"), tr("Temps (ms)"), tr("Liaison"), tr("Détail"), tr("Identification")]
+        )
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -238,7 +241,9 @@ class ScanPage(QWidget):
         self.sweep_widget.setEnabled(self.link_sweep.isChecked() and not self._tcp)
         if self.link_sweep.isChecked() and not self._tcp:
             n = self._selected_bauds_count() * self._selected_framings_count()
-            self.link_hint.setText(f"{n} combinaison(s) : chaque adresse est testée avec chacune, le scan sera long.")
+            self.link_hint.setText(
+                tr("{p0} combinaison(s) : chaque adresse est testée avec chacune, le scan sera long.").format(p0=n)
+            )
         elif self.link_custom.isChecked():
             self.link_hint.setText(
                 "Le port du bandeau est conservé ; vitesse, parité et stop sont remplacés pour la durée du scan."
@@ -293,7 +298,9 @@ class ScanPage(QWidget):
         self.progress.setValue(0)
         self.summary.setText("")
         variants = len(plan.settings_variants())
-        self.status_message.emit(f"Scan en cours : {len(plan.slaves)} adresses × {variants} jeu(x) de paramètres")
+        self.status_message.emit(
+            tr("Scan en cours : {p0} adresses × {p1} jeu(x) de paramètres").format(p0=len(plan.slaves), p1=variants)
+        )
 
     def on_progress(self, done: int, total: int, label: str) -> None:
         self.progress.setRange(0, max(total, 1))
@@ -325,7 +332,7 @@ class ScanPage(QWidget):
         color = _STATUS_COLOR[r.status]
         cells = [
             str(r.slave_id),
-            r.status.value,
+            tr(r.status.value),
             f"{r.response_time_ms:.1f}" if r.response_time_ms is not None else "-",
             r.settings.summary(),
             r.detail,
@@ -366,9 +373,11 @@ class ScanPage(QWidget):
             if r.status is ScanStatus.ABSENT and not self.show_absent.isChecked():
                 continue
             rt = f"{r.response_time_ms:.1f}" if r.response_time_ms is not None else "-"
-            lines.append(f"{r.slave_id}\t{r.status.value}\t{rt}\t{r.settings.summary()}\t{r.detail}\t{r.identity_text}")
+            lines.append(
+                f"{r.slave_id}\t{tr(r.status.value)}\t{rt}\t{r.settings.summary()}\t{r.detail}\t{r.identity_text}"
+            )
         QApplication.clipboard().setText("\n".join(lines))
-        self.status_message.emit(f"Résultats du scan copiés ({len(lines) - 1} lignes)")
+        self.status_message.emit(tr("Résultats du scan copiés ({p0} lignes)").format(p0=len(lines) - 1))
 
     def clear(self) -> None:
         self._results.clear()

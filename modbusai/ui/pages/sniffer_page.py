@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from modbusai.analysis.session import SessionStore
 from modbusai.analysis.sniffer import BusCounters, FrameKind, SniffedFrame, Transaction, function_name
+from modbusai.i18n import tr
 from modbusai.modbus.records import ExchangeStatus
 from modbusai.transport.records import LinkSettings
 
@@ -53,15 +54,15 @@ class SnifferPage(QWidget):
         self.session = session
         self._listening = False
 
-        self.start_btn = QPushButton("DÉMARRER ÉCOUTE")
-        self.stop_btn = QPushButton("ARRÊTER")
+        self.start_btn = QPushButton(tr("DÉMARRER ÉCOUTE"))
+        self.stop_btn = QPushButton(tr("ARRÊTER"))
         self.stop_btn.setEnabled(False)
-        self.clear_btn = QPushButton("EFFACER")
-        self.autoscroll = QCheckBox("Défilement auto")
+        self.clear_btn = QPushButton(tr("EFFACER"))
+        self.autoscroll = QCheckBox(tr("Défilement auto"))
         self.autoscroll.setChecked(True)
-        self.show_frames = QCheckBox("Trames brutes")
+        self.show_frames = QCheckBox(tr("Trames brutes"))
         self.show_frames.setChecked(False)
-        self.counters_label = QLabel("Écoute arrêtée")
+        self.counters_label = QLabel(tr("Écoute arrêtée"))
         self.hint = QLabel(
             "Écoute seule : l'outil n'émet jamais. Branché en parallèle du maître existant, "
             "il voit requêtes et réponses."
@@ -80,13 +81,22 @@ class SnifferPage(QWidget):
 
         self.transactions = QTableWidget(0, 8)
         self.transactions.setHorizontalHeaderLabels(
-            ["Heure", "Esclave", "Fonction", "Détail", "Requête", "Réponse", "Temps (ms)", "Résultat"]
+            [
+                tr("Heure"),
+                tr("Esclave"),
+                tr("Fonction"),
+                tr("Détail"),
+                tr("Requête"),
+                tr("Réponse"),
+                tr("Temps (ms)"),
+                tr("Résultat"),
+            ]
         )
         self._setup_table(self.transactions, stretch_col=5)
 
         self.frames = QTableWidget(0, 7)
         self.frames.setHorizontalHeaderLabels(
-            ["Heure", "Type", "Esclave", "FC", "Détail", "Hexa", "Silence avant (ms)"]
+            [tr("Heure"), tr("Type"), tr("Esclave"), tr("FC"), tr("Détail"), tr("Hexa"), tr("Silence avant (ms)")]
         )
         self._setup_table(self.frames, stretch_col=5)
         self.frames.setVisible(False)
@@ -94,15 +104,15 @@ class SnifferPage(QWidget):
         self.stats = QTableWidget(0, 9)
         self.stats.setHorizontalHeaderLabels(
             [
-                "Esclave",
-                "Requêtes",
-                "OK",
-                "Exceptions",
-                "Timeouts",
-                "CRC",
-                "Réussite",
-                "Temps moyen (ms)",
-                "Min / Max (ms)",
+                tr("Esclave"),
+                tr("Requêtes"),
+                tr("OK"),
+                tr("Exceptions"),
+                tr("Timeouts"),
+                tr("CRC"),
+                tr("Réussite"),
+                tr("Temps moyen (ms)"),
+                tr("Min / Max (ms)"),
             ]
         )
         self._setup_table(self.stats, stretch_col=None)
@@ -147,8 +157,8 @@ class SnifferPage(QWidget):
         self._listening = True
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
-        self.counters_label.setText(f"Écoute sur {settings.summary()}")
-        self.status_message.emit(f"Mode espion actif sur {settings.summary()} (écoute seule)")
+        self.counters_label.setText(tr("Écoute sur {p0}").format(p0=settings.summary()))
+        self.status_message.emit(tr("Mode espion actif sur {p0} (écoute seule)").format(p0=settings.summary()))
 
     def on_stopped(self) -> None:
         self._listening = False
@@ -173,8 +183,8 @@ class SnifferPage(QWidget):
         )
 
     def on_transactions(self, transactions: list[Transaction]) -> None:
-        for tr in transactions:
-            self._append_transaction(tr)
+        for transaction in transactions:
+            self._append_transaction(transaction)
         self.refresh_stats()
 
     def _append_frame(self, sf: SniffedFrame) -> None:
@@ -187,7 +197,7 @@ class SnifferPage(QWidget):
         silence = "" if sf.frame.silence_before_ns is None else f"{sf.frame.silence_before_ns / 1e6:.1f}"
         cells = [
             sf.wall_time.strftime("%H:%M:%S.%f")[:-3],
-            sf.kind.value,
+            tr(sf.kind.value),
             "" if sf.slave_id is None else str(sf.slave_id),
             "" if sf.function is None else f"{sf.function:02X}",
             sf.detail,

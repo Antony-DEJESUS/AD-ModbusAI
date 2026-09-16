@@ -19,3 +19,4 @@ select = ["E", "F", "I", "UP", "B"]
 "modbusai/analysis/diagnostic.py" = ["E501"]  # libellés d'hypothèses en français
 "modbusai/analysis/stress.py" = ["E501"]
 "modbusai/analysis/report.py" = ["E501"]
+"modbusai/i18n_en.py" = ["E501"]  # dictionnaire de traduction

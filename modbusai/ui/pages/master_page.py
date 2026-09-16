@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import QSplitter, QVBoxLayout, QWidget
 
+from modbusai.i18n import tr
 from modbusai.modbus import codec
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus, Request
 from modbusai.ui.widgets.actions_panel import ActionsPanel
@@ -71,7 +72,7 @@ class MasterPage(QWidget):
         self.actions.cyclic.toggled.connect(lambda checked: None if checked else self.stop_cycle())
         self.exchange.clear_requested.connect(self._clear)
         self.log_panel.copied.connect(
-            lambda n: self.status_message.emit(f"Journal copié dans le presse-papiers ({n} lignes)")
+            lambda n: self.status_message.emit(tr("Journal copié dans le presse-papiers ({p0} lignes)").format(p0=n))
         )
         self._on_request_changed()
 
@@ -82,7 +83,7 @@ class MasterPage(QWidget):
 
     def on_connected(self, summary: str) -> None:
         self._connected = True
-        self.console.log_info(f"Connexion {summary}")
+        self.console.log_info(tr("Connexion {p0}").format(p0=summary))
         if self._resume_cycle and self.actions.cyclic.isChecked():
             self._start_cycle("Cycle repris")
         self._resume_cycle = False
@@ -93,7 +94,7 @@ class MasterPage(QWidget):
         if manual:
             self._resume_cycle = False
         self.stop_cycle()
-        self.console.log_info("Déconnexion")
+        self.console.log_info(tr("Déconnexion"))
 
     def log_info(self, text: str) -> None:
         self.console.log_info(text)
@@ -166,7 +167,7 @@ class MasterPage(QWidget):
     def stop_cycle(self) -> None:
         if self._cycle_timer.isActive():
             self._cycle_timer.stop()
-            self.console.log_info("Cycle arrêté")
+            self.console.log_info(tr("Cycle arrêté"))
         self.actions.set_cycling(False)
 
     # ============================================================== retours
@@ -180,10 +181,14 @@ class MasterPage(QWidget):
                 self._last_start = rec.request.address
                 self._last_is_bits = rec.request.function in (1, 2)
                 self._refresh_grid()
-            self.status_message.emit(f"Status : {rec.status.name}  -  {rec.response_time_ms:.1f} ms")
+            self.status_message.emit(
+                tr("Status : {p0}  -  {p1:.1f} ms").format(p0=rec.status.name, p1=rec.response_time_ms)
+            )
         else:
             self.grid.mark_stale(True)
-            self.status_message.emit(f"Status : {rec.status.name}  -  {rec.error_message or ''}")
+            self.status_message.emit(
+                tr("Status : {p0}  -  {p1}").format(p0=rec.status.name, p1=rec.error_message or "")
+            )
             if rec.status is ExchangeStatus.TRANSPORT_ERROR:
                 self._resume_cycle = self._cycle_timer.isActive() and self.auto_reconnect
                 self.stop_cycle()
@@ -192,7 +197,7 @@ class MasterPage(QWidget):
     def on_request_failed(self, message: str) -> None:
         self._busy = False
         self.console.log_error(message)
-        self.status_message.emit(f"Status : {message}")
+        self.status_message.emit(tr("Status : {p0}").format(p0=message))
 
     # =============================================================== grille
     def _display_options(self) -> codec.DisplayOptions:

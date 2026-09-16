@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 
 from modbusai.analysis.identification import DeviceIdentity
+from modbusai.i18n import tr
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus, FunctionCode, Request
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings
 
@@ -95,18 +96,18 @@ class ScanResult:
 def classify(record: ExchangeRecord) -> tuple[ScanStatus, str]:
     st = record.status
     if st is ExchangeStatus.OK:
-        return ScanStatus.PRESENT, f"répond en {record.response_time_ms:.1f} ms"
+        return ScanStatus.PRESENT, tr("répond en {p0:.1f} ms").format(p0=record.response_time_ms)
     if st is ExchangeStatus.MODBUS_EXCEPTION:
-        return ScanStatus.PRESENT_EXCEPTION, record.error_message or "exception"
+        return ScanStatus.PRESENT_EXCEPTION, record.error_message or tr("exception")
     if st is ExchangeStatus.CRC_ERROR:
-        return ScanStatus.NOISY, record.error_message or "CRC invalide"
+        return ScanStatus.NOISY, record.error_message or tr("CRC invalide")
     if st is ExchangeStatus.BAD_RESPONSE:
         if record.rx_frame is not None and record.rx_frame.data == record.tx_frame.data:
-            return ScanStatus.CONFLICT, "écho de la requête (adaptateur sans direction automatique ?)"
-        return ScanStatus.CONFLICT, record.error_message or "réponse incohérente"
+            return ScanStatus.CONFLICT, tr("écho de la requête (adaptateur sans direction automatique ?)")
+        return ScanStatus.CONFLICT, record.error_message or tr("réponse incohérente")
     if st is ExchangeStatus.TRANSPORT_ERROR:
-        return ScanStatus.ERROR, record.error_message or "erreur liaison"
-    return ScanStatus.ABSENT, "aucune réponse"
+        return ScanStatus.ERROR, record.error_message or tr("erreur liaison")
+    return ScanStatus.ABSENT, tr("aucune réponse")
 
 
 def merge_attempts(records: list[ExchangeRecord]) -> tuple[ScanStatus, str]:
@@ -125,7 +126,7 @@ def merge_attempts(records: list[ExchangeRecord]) -> tuple[ScanStatus, str]:
         c = classify(rec)
         if best is None or order.index(c[0]) < order.index(best[0]):
             best = c
-    return best if best is not None else (ScanStatus.ABSENT, "aucune réponse")
+    return best if best is not None else (ScanStatus.ABSENT, tr("aucune réponse"))
 
 
 def identification_requests(slave_id: int) -> Iterator[Request]:

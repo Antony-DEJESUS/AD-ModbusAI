@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
     QDialog,
-    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -52,6 +51,7 @@ from modbusai.analysis.observations import SlaveStats
 from modbusai.analysis.report import build_report, suggested_filename
 from modbusai.analysis.session import SessionStore
 from modbusai.analysis.stress import StressPhase, StressReport, default_scenario
+from modbusai.i18n import tr
 from modbusai.modbus.records import Request
 from modbusai.transport.records import LinkSettings
 from modbusai.ui.widgets.request_bar import RegisterType
@@ -86,17 +86,17 @@ class ScoreLegend(QWidget):
         super().__init__(parent)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(QLabel("Score :"))
+        layout.addWidget(QLabel(tr("Score :")))
         for lo, hi, label, color in SCORE_LEGEND:
-            chip = QLabel(f" {lo}-{hi} {label} ")
+            chip = QLabel(f" {lo}-{hi} {tr(label)} ")
             chip.setStyleSheet(f"background: {color}; color: white; border-radius: 4px; padding: 1px 4px;")
             layout.addWidget(chip)
         info = QLabel("?")
-        info.setToolTip(SCORE_EXPLANATION)
+        info.setToolTip(tr(SCORE_EXPLANATION))
         info.setStyleSheet("font-weight: bold;")
         layout.addWidget(info)
         layout.addStretch(1)
-        self.setToolTip(SCORE_EXPLANATION)
+        self.setToolTip(tr(SCORE_EXPLANATION))
 
 
 class HypothesisHelpDialog(QDialog):
@@ -104,32 +104,35 @@ class HypothesisHelpDialog(QDialog):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Aide : hypothèses du diagnostic")
+        self.setWindowTitle(tr("Aide : hypothèses du diagnostic"))
         self.resize(760, 560)
         browser = QTextBrowser()
         browser.setOpenExternalLinks(False)
         browser.setHtml(self.build_html())
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        buttons.rejected.connect(self.reject)
-        buttons.accepted.connect(self.accept)
+        close_btn = QPushButton(tr("Fermer"))
+        close_btn.clicked.connect(self.accept)
         layout = QVBoxLayout(self)
         layout.addWidget(browser, 1)
-        layout.addWidget(buttons)
+        layout.addWidget(close_btn, 0, Qt.AlignmentFlag.AlignRight)
 
     @staticmethod
     def build_html() -> str:
-        parts = ["<h2>Comment lire le diagnostic</h2>", f"<p>{SCORE_EXPLANATION}</p>", "<ul>"]
+        parts = [f"<h2>{tr('Comment lire le diagnostic')}</h2>", f"<p>{tr(SCORE_EXPLANATION)}</p>", "<ul>"]
         for lo, hi, label, color in SCORE_LEGEND:
-            parts.append(f'<li><b style="color:{color}">{lo} à {hi}</b> : {label}</li>')
-        parts.append("</ul><h2>Hypothèses possibles</h2>")
+            parts.append(f'<li><b style="color:{color}">{lo} {tr("à")} {hi}</b> : {tr(label)}</li>')
+        parts.append(f"</ul><h2>{tr('Hypothèses possibles')}</h2>")
         for info in CATALOGUE.values():
-            parts.append(f"<h3>{info.title}</h3><p><i>{info.summary}</i></p>")
-            parts.append(f"<p><b>Déclenchement :</b> {info.trigger}</p>")
+            parts.append(f"<h3>{tr(info.title)}</h3><p><i>{tr(info.summary)}</i></p>")
+            parts.append(f"<p><b>{tr('Déclenchement :')}</b> {tr(info.trigger)}</p>")
             parts.append(
-                "<p><b>Causes classiques :</b></p><ul>" + "".join(f"<li>{c}</li>" for c in info.causes) + "</ul>"
+                f"<p><b>{tr('Causes classiques :')}</b></p><ul>"
+                + "".join(f"<li>{tr(c)}</li>" for c in info.causes)
+                + "</ul>"
             )
             parts.append(
-                "<p><b>Pour confirmer :</b></p><ul>" + "".join(f"<li>{t}</li>" for t in info.how_to_confirm) + "</ul>"
+                f"<p><b>{tr('Pour confirmer :')}</b></p><ul>"
+                + "".join(f"<li>{tr(t)}</li>" for t in info.how_to_confirm)
+                + "</ul>"
             )
         return "".join(parts)
 
@@ -158,7 +161,7 @@ class DiagnosticPage(QWidget):
         self.slave.setRange(1, 247)
         self.reg_type = QComboBox()
         for t in RegisterType:
-            self.reg_type.addItem(t.label, t)
+            self.reg_type.addItem(tr(t.label), t)
         self.reg_type.setCurrentIndex(list(RegisterType).index(RegisterType.HOLDING))
         self.address = QSpinBox()
         self.address.setRange(0, 65535)
@@ -168,8 +171,8 @@ class DiagnosticPage(QWidget):
         self.period.setRange(10, 60000)
         self.period.setValue(200)
         self.period.setSuffix(" ms")
-        self.by_duration = QRadioButton("Durée")
-        self.by_count = QRadioButton("Nombre")
+        self.by_duration = QRadioButton(tr("Durée"))
+        self.by_count = QRadioButton(tr("Nombre"))
         self.by_duration.setChecked(True)
         group = QButtonGroup(self)
         group.addButton(self.by_duration)
@@ -186,24 +189,24 @@ class DiagnosticPage(QWidget):
         self.stress_duration.setValue(300)
         self.stress_duration.setSuffix(" s")
 
-        self.run_btn = QPushButton("LANCER CAMPAGNE")
-        self.stress_btn = QPushButton("TEST DE TORTURE")
+        self.run_btn = QPushButton(tr("LANCER CAMPAGNE"))
+        self.stress_btn = QPushButton(tr("TEST DE TORTURE"))
         self.stress_btn.setToolTip(
             "Enchaîne référence, rafale, trames longues, timeout serré (et vitesse réduite en RTU)"
         )
-        self.cancel_btn = QPushButton("ARRÊTER")
+        self.cancel_btn = QPushButton(tr("ARRÊTER"))
         self.cancel_btn.setEnabled(False)
         self.progress = QProgressBar()
         self.progress.setTextVisible(True)
-        self.countdown = QLabel("Prêt.")
+        self.countdown = QLabel(tr("Prêt."))
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.addRow("Esclave", self.slave)
-        form.addRow("Type", self.reg_type)
-        form.addRow("Registre", self.address)
-        form.addRow("Longueur", self.count)
-        form.addRow("Période", self.period)
+        form.addRow(tr("Esclave"), self.slave)
+        form.addRow(tr("Type"), self.reg_type)
+        form.addRow(tr("Registre"), self.address)
+        form.addRow(tr("Longueur"), self.count)
+        form.addRow(tr("Période"), self.period)
         limit = QHBoxLayout()
         limit.addWidget(self.by_duration)
         limit.addWidget(self.duration)
@@ -211,14 +214,14 @@ class DiagnosticPage(QWidget):
         limit.addWidget(self.max_count)
         limit_w = QWidget()
         limit_w.setLayout(limit)
-        form.addRow("Limite", limit_w)
+        form.addRow(tr("Limite"), limit_w)
         torture = QHBoxLayout()
-        torture.addWidget(QLabel("Durée totale"))
+        torture.addWidget(QLabel(tr("Durée totale")))
         torture.addWidget(self.stress_duration)
         torture.addStretch(1)
         torture_w = QWidget()
         torture_w.setLayout(torture)
-        form.addRow("Torture", torture_w)
+        form.addRow(tr("Torture"), torture_w)
         buttons = QHBoxLayout()
         buttons.addWidget(self.run_btn)
         buttons.addWidget(self.stress_btn)
@@ -229,19 +232,19 @@ class DiagnosticPage(QWidget):
         target_layout.addWidget(self.progress)
         target_layout.addWidget(self.countdown)
         target_layout.addStretch(1)
-        self.target_box = QGroupBox("Cible et campagne")
+        self.target_box = QGroupBox(tr("Cible et campagne"))
         self.target_box.setLayout(target_layout)
         self.target_box.setMaximumWidth(420)
 
         # ------------------------------------------------------------- analyse
-        self.analyse_btn = QPushButton("ANALYSER")
-        self.clear_btn = QPushButton("EFFACER HISTORIQUE")
-        self.export_btn = QPushButton("EXPORTER TXT")
-        self.help_btn = QPushButton("AIDE")
+        self.analyse_btn = QPushButton(tr("ANALYSER"))
+        self.clear_btn = QPushButton(tr("EFFACER HISTORIQUE"))
+        self.export_btn = QPushButton(tr("EXPORTER TXT"))
+        self.help_btn = QPushButton(tr("AIDE"))
         self.sources = QComboBox()
         for label, value in SOURCES:
             self.sources.addItem(label, value)
-        self.count_label = QLabel("0 observation")
+        self.count_label = QLabel(tr("0 observation"))
 
         top = QHBoxLayout()
         top.addWidget(self.analyse_btn)
@@ -249,7 +252,7 @@ class DiagnosticPage(QWidget):
         top.addWidget(self.export_btn)
         top.addWidget(self.help_btn)
         top.addSpacing(12)
-        top.addWidget(QLabel("Sources"))
+        top.addWidget(QLabel(tr("Sources")))
         top.addWidget(self.sources)
         top.addStretch(1)
         top.addWidget(self.count_label)
@@ -257,18 +260,18 @@ class DiagnosticPage(QWidget):
         self.stats_table = QTableWidget(0, 12)
         self.stats_table.setHorizontalHeaderLabels(
             [
-                "Esclave",
-                "Échanges",
-                "Réussite",
-                "Timeouts",
-                "CRC",
-                "Exceptions",
-                "Incohérentes",
-                "Liaison",
-                "Moy (ms)",
-                "P95 (ms)",
-                "Max (ms)",
-                "Gigue (ms)",
+                tr("Esclave"),
+                tr("Échanges"),
+                tr("Réussite"),
+                tr("Timeouts"),
+                tr("CRC"),
+                tr("Exceptions"),
+                tr("Incohérentes"),
+                tr("Liaison"),
+                tr("Moy (ms)"),
+                tr("P95 (ms)"),
+                tr("Max (ms)"),
+                tr("Gigue (ms)"),
             ]
         )
         self.stats_table.verticalHeader().setVisible(False)
@@ -288,14 +291,14 @@ class DiagnosticPage(QWidget):
         tests_widget.setLayout(self.tests_box)
         self.results = QPlainTextEdit()
         self.results.setReadOnly(True)
-        self.results.setPlaceholderText("Résultats des campagnes et du test de torture")
+        self.results.setPlaceholderText(tr("Résultats des campagnes et du test de torture"))
 
         right = QVBoxLayout()
-        right.addWidget(QLabel("Indices"))
+        right.addWidget(QLabel(tr("Indices")))
         right.addWidget(self.detail, 2)
-        right.addWidget(QLabel("Tests pour départager"))
+        right.addWidget(QLabel(tr("Tests pour départager")))
         right.addWidget(tests_widget, 2)
-        right.addWidget(QLabel("Résultats"))
+        right.addWidget(QLabel(tr("Résultats")))
         right.addWidget(self.results, 2)
         right_w = QWidget()
         right_w.setLayout(right)
@@ -309,10 +312,10 @@ class DiagnosticPage(QWidget):
         analysis_layout = QVBoxLayout()
         analysis_layout.setContentsMargins(0, 0, 0, 0)
         analysis_layout.addLayout(top)
-        analysis_layout.addWidget(QLabel("Statistiques par esclave"))
+        analysis_layout.addWidget(QLabel(tr("Statistiques par esclave")))
         analysis_layout.addWidget(self.stats_table)
         head = QHBoxLayout()
-        head.addWidget(QLabel("Hypothèses classées"))
+        head.addWidget(QLabel(tr("Hypothèses classées")))
         head.addSpacing(12)
         head.addWidget(self.legend)
         analysis_layout.addLayout(head)
@@ -370,7 +373,7 @@ class DiagnosticPage(QWidget):
 
     def _launch_stress(self) -> None:
         if self._settings is None:
-            self.status_message.emit("Configurez la liaison avant le test de torture.")
+            self.status_message.emit(tr("Configurez la liaison avant le test de torture."))
             return
         others = tuple(s for s in self.session.stats().keys() if s != self.slave.value())
         phases = default_scenario(self.target_request(), self._settings, float(self.stress_duration.value()), others)
@@ -404,30 +407,38 @@ class DiagnosticPage(QWidget):
         self.progress.setRange(0, spec.expected_count() or 0)
         self.progress.setValue(0)
         self.results.appendPlainText(f"▶ {spec.describe()}")
-        self.status_message.emit(f"Campagne : {spec.describe()}")
+        self.status_message.emit(tr("Campagne : {p0}").format(p0=spec.describe()))
 
     def on_stress_started(self, phases: list[StressPhase]) -> None:
         self._stress_total = len(phases)
         self._stress_report = None
-        self.results.appendPlainText(f"▶ TEST DE TORTURE : {len(phases)} phases")
+        self.results.appendPlainText(tr("▶ TEST DE TORTURE : {p0} phases").format(p0=len(phases)))
 
     def on_stress_phase(self, index: int, total: int, phase: StressPhase) -> None:
-        self.results.appendPlainText(f"   phase {index + 1}/{total} : {phase.title} - {phase.purpose}")
+        self.results.appendPlainText(
+            tr("   phase {p0}/{p1} : {p2} - {p3}").format(p0=index + 1, p1=total, p2=phase.title, p3=phase.purpose)
+        )
 
     def on_progress(self, done: int, expected: int, elapsed: float, remaining: float) -> None:
         self.progress.setRange(0, max(expected, done, 1))
         self.progress.setValue(done)
         if remaining > 0 or expected == 0:
-            self.countdown.setText(f"{done} lectures  |  écoulé {_mmss(elapsed)}  |  reste {_mmss(remaining)}")
+            self.countdown.setText(
+                tr("{p0} lectures  |  écoulé {p1}  |  reste {p2}").format(
+                    p0=done, p1=_mmss(elapsed), p2=_mmss(remaining)
+                )
+            )
         else:
-            self.countdown.setText(f"{done} / {expected} lectures  |  écoulé {_mmss(elapsed)}")
+            self.countdown.setText(
+                tr("{p0} / {p1} lectures  |  écoulé {p2}").format(p0=done, p1=expected, p2=_mmss(elapsed))
+            )
 
     def on_campaign_finished(self, stats: SlaveStats | None) -> None:
         self._running = False
         self.cancel_btn.setEnabled(False)
         self.set_can_run_tests(self._can_run)
         if stats is None:
-            self.results.appendPlainText("   interrompue avant toute lecture (liaison fermée ?)")
+            self.results.appendPlainText(tr("   interrompue avant toute lecture (liaison fermée ?)"))
         else:
             valid = 100 * (stats.ok + stats.exception) / stats.total
             line = (
@@ -443,7 +454,7 @@ class DiagnosticPage(QWidget):
                 self._comparisons.append(comparison)
                 self.results.appendPlainText(f"   ⇒ {comparison.verdict()}")
         self._pending_test = None
-        self.countdown.setText("Terminé.")
+        self.countdown.setText(tr("Terminé."))
         self.refresh()
 
     def on_stress_finished(self, report: StressReport | None) -> None:
@@ -452,7 +463,7 @@ class DiagnosticPage(QWidget):
         self.set_can_run_tests(self._can_run)
         self._stress_report = report
         if report is None:
-            self.results.appendPlainText("   test de torture interrompu.")
+            self.results.appendPlainText(tr("   test de torture interrompu."))
         else:
             for r in report.results:
                 st = r.stats
@@ -463,7 +474,7 @@ class DiagnosticPage(QWidget):
             for c in report.conclusions:
                 self.results.appendPlainText(f"   {c}")
             self.results.appendPlainText(f"   ⇒ {report.orientation}")
-        self.countdown.setText("Terminé.")
+        self.countdown.setText(tr("Terminé."))
         self.refresh()
 
     # ============================================================= analyse
@@ -471,7 +482,7 @@ class DiagnosticPage(QWidget):
         sources = self.sources.currentData()
         observations = self.session.observations(sources)
         self._stats = self.session.stats(sources)
-        self.count_label.setText(f"{len(observations)} observation(s)")
+        self.count_label.setText(tr("{p0} observation(s)").format(p0=len(observations)))
         self._fill_stats()
         self._hypotheses = analyse(self._stats, observations, self._settings)
         self.hyp_list.clear()
@@ -525,10 +536,10 @@ class DiagnosticPage(QWidget):
         lines = [h.title.upper(), f"Portée : {h.scope}   Score : {h.score}/100", "", h.summary, ""]
         lines += [f"• {e}" for e in h.evidence]
         if info is not None:
-            lines += ["", "Causes classiques : " + " ; ".join(info.causes)]
+            lines += ["", tr("Causes classiques : ") + " ; ".join(tr(c) for c in info.causes)]
         self.detail.setPlainText("\n".join(lines))
         if not h.tests:
-            self.tests_box.addWidget(QLabel("Aucun test complémentaire : prolonger l'observation."))
+            self.tests_box.addWidget(QLabel(tr("Aucun test complémentaire : prolonger l'observation.")))
         for test in h.tests:
             self.tests_box.addWidget(self._test_row(test, h))
 
@@ -540,7 +551,7 @@ class DiagnosticPage(QWidget):
         text.setWordWrap(True)
         lay.addWidget(text, 1)
         if test.runnable:
-            btn = QPushButton("LANCER")
+            btn = QPushButton(tr("LANCER"))
             dur = f"{test.duration_s:.0f} s" if test.duration_s else f"{test.count} lectures"
             btn.setToolTip(
                 f"Campagne de {dur} toutes les {test.period_ms} ms"
@@ -550,7 +561,7 @@ class DiagnosticPage(QWidget):
             btn.clicked.connect(lambda _c=False, t=test, h=hyp: self._launch_test(t, h))
             lay.addWidget(btn)
         else:
-            manual = QLabel("manuel")
+            manual = QLabel(tr("manuel"))
             manual.setStyleSheet("color: #8b949e;")
             lay.addWidget(manual)
         return w
@@ -560,7 +571,7 @@ class DiagnosticPage(QWidget):
             return
         baseline = self._stats.get(hyp.slave_id)
         if baseline is None:
-            self.status_message.emit("Pas de statistiques de référence pour cet esclave.")
+            self.status_message.emit(tr("Pas de statistiques de référence pour cet esclave."))
             return
         request = self.target_request()
         if request.slave_id != hyp.slave_id:
@@ -601,9 +612,9 @@ class DiagnosticPage(QWidget):
             with open(path, "w", encoding="utf-8-sig", newline="\r\n") as f:
                 f.write(text)
         except OSError as exc:
-            self.status_message.emit(f"Export impossible : {exc}")
+            self.status_message.emit(tr("Export impossible : {p0}").format(p0=exc))
             return None
-        self.status_message.emit(f"Diagnostic exporté : {path}")
+        self.status_message.emit(tr("Diagnostic exporté : {p0}").format(p0=path))
         return path
 
     def report_text(self) -> str:
@@ -624,4 +635,4 @@ class DiagnosticPage(QWidget):
         self._comparisons.clear()
         self._stress_report = None
         self.refresh()
-        self.status_message.emit("Historique de diagnostic effacé")
+        self.status_message.emit(tr("Historique de diagnostic effacé"))

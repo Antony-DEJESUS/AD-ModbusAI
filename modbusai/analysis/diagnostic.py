@@ -14,6 +14,7 @@ from dataclasses import dataclass, field, replace
 
 from modbusai.analysis.campaign import CampaignSpec
 from modbusai.analysis.observations import Observation, SlaveStats
+from modbusai.i18n import tr
 from modbusai.modbus.exceptions import exception_label
 from modbusai.modbus.records import Request
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings
@@ -248,7 +249,7 @@ class Hypothesis:
 
     @property
     def scope(self) -> str:
-        return f"esclave {self.slave_id}" if self.slave_id is not None else "réseau"
+        return tr("esclave {p0}").format(p0=self.slave_id) if self.slave_id is not None else "réseau"
 
 
 def _pct(x: float) -> str:
@@ -265,32 +266,37 @@ def _rule_absent(st: SlaveStats) -> Hypothesis | None:
         return None
     if st.timeout_ratio < 0.9:
         return None
-    ev = [f"{st.timeout}/{st.total} requêtes sans réponse", "aucune réponse valide ni exception"]
+    ev = [
+        tr("{p0}/{p1} requêtes sans réponse").format(p0=st.timeout, p1=st.total),
+        tr("aucune réponse valide ni exception"),
+    ]
     tests = [
         SuggestedTest(
             "scan_addr",
-            "Scanner les adresses",
-            "Onglet Scan réseau : l'équipement répond peut-être à une autre adresse.",
+            tr("Scanner les adresses"),
+            tr("Onglet Scan réseau : l'équipement répond peut-être à une autre adresse."),
         ),
         SuggestedTest(
-            "wiring", "Inverser A et B", "Cause la plus fréquente sur chantier ; refaire une lecture après inversion."
+            "wiring",
+            tr("Inverser A et B"),
+            tr("Cause la plus fréquente sur chantier ; refaire une lecture après inversion."),
         ),
         SuggestedTest(
             "scan_baud",
-            "Balayer vitesses et parités",
-            "Onglet Scan réseau avec le balayage activé, sur cette seule adresse.",
+            tr("Balayer vitesses et parités"),
+            tr("Onglet Scan réseau avec le balayage activé, sur cette seule adresse."),
         ),
         SuggestedTest(
             "fc03",
-            "Essayer un autre code fonction",
-            "Certains équipements ne répondent qu'en FC03 ou FC04 ; lire le registre 0 dans chaque type.",
+            tr("Essayer un autre code fonction"),
+            tr("Certains équipements ne répondent qu'en FC03 ou FC04 ; lire le registre 0 dans chaque type."),
         ),
     ]
     return Hypothesis(
         "absent",
-        CATALOGUE["absent"].title,
+        tr(CATALOGUE["absent"].title),
         _clamp(60 + 40 * st.timeout_ratio),
-        CATALOGUE["absent"].summary,
+        tr(CATALOGUE["absent"].summary),
         st.slave_id,
         ev,
         tests,
@@ -303,25 +309,28 @@ def _rule_framing(st: SlaveStats) -> Hypothesis | None:
     ratio = st.crc_ratio
     if ratio < 0.3 or st.ok_ratio > 0.5:
         return None
-    ev = [f"{st.crc_error}/{st.total} réponses au CRC invalide", f"{st.ok} réponses correctes seulement"]
+    ev = [
+        tr("{p0}/{p1} réponses au CRC invalide").format(p0=st.crc_error, p1=st.total),
+        tr("{p0} réponses correctes seulement").format(p0=st.ok),
+    ]
     tests = [
         SuggestedTest(
             "scan_baud",
-            "Balayer vitesses et parités",
-            "Onglet Scan réseau avec le balayage activé : si une combinaison répond proprement, c'est la bonne.",
+            tr("Balayer vitesses et parités"),
+            tr("Onglet Scan réseau avec le balayage activé : si une combinaison répond proprement, c'est la bonne."),
         ),
         SuggestedTest(
             "parity_even",
-            "Campagne en parité Even",
-            "30 lectures en 8E1 aux mêmes vitesse et adresse.",
+            tr("Campagne en parité Even"),
+            tr("30 lectures en 8E1 aux mêmes vitesse et adresse."),
             runnable=True,
             parity=Parity.EVEN,
             stopbits=1.0,
         ),
         SuggestedTest(
             "stop2",
-            "Campagne en 8N2",
-            "30 lectures avec 2 bits de stop.",
+            tr("Campagne en 8N2"),
+            tr("30 lectures avec 2 bits de stop."),
             runnable=True,
             parity=Parity.NONE,
             stopbits=2.0,
@@ -329,9 +338,9 @@ def _rule_framing(st: SlaveStats) -> Hypothesis | None:
     ]
     return Hypothesis(
         "framing",
-        CATALOGUE["framing"].title,
+        tr(CATALOGUE["framing"].title),
         _clamp(50 + 50 * ratio),
-        CATALOGUE["framing"].summary,
+        tr(CATALOGUE["framing"].summary),
         st.slave_id,
         ev,
         tests,
@@ -345,23 +354,29 @@ def _rule_line_quality(st: SlaveStats, settings: LinkSettings | None) -> Hypothe
     if intermittent < 0.02 or st.ok_ratio < 0.5:
         return None
     ev = [
-        f"{_pct(st.ok_ratio)} de réussite, défauts intermittents : {st.crc_error} CRC, {st.timeout} timeouts, {st.bad_response} incohérentes"
+        tr("{p0} de réussite, défauts intermittents : {p1} CRC, {p2} timeouts, {p3} incohérentes").format(
+            p0=_pct(st.ok_ratio), p1=st.crc_error, p2=st.timeout, p3=st.bad_response
+        )
     ]
     if st.rt_jitter is not None and st.rt_avg:
-        ev.append(f"temps de réponse {st.rt_avg:.1f} ms en moyenne, gigue {st.rt_jitter:.1f} ms")
+        ev.append(
+            tr("temps de réponse {p0:.1f} ms en moyenne, gigue {p1:.1f} ms").format(p0=st.rt_avg, p1=st.rt_jitter)
+        )
     tests = [
         SuggestedTest(
             "termination",
-            "Vérifier terminaisons et polarisation",
-            "120 Ω aux deux extrémités seulement, pas de dérivation longue, blindage relié d'un seul côté.",
+            tr("Vérifier terminaisons et polarisation"),
+            tr("120 Ω aux deux extrémités seulement, pas de dérivation longue, blindage relié d'un seul côté."),
         ),
     ]
     if isinstance(settings, SerialSettings) and settings.baudrate > 9600:
         tests.append(
             SuggestedTest(
                 "slow_baud",
-                "Campagne à 9600 bauds",
-                "Si les défauts disparaissent à vitesse réduite, la ligne est en cause (longueur, terminaisons, bruit). L'esclave doit être réglé sur 9600 pour ce test.",
+                tr("Campagne à 9600 bauds"),
+                tr(
+                    "Si les défauts disparaissent à vitesse réduite, la ligne est en cause (longueur, terminaisons, bruit). L'esclave doit être réglé sur 9600 pour ce test."
+                ),
                 runnable=True,
                 baudrate=9600,
             )
@@ -369,8 +384,8 @@ def _rule_line_quality(st: SlaveStats, settings: LinkSettings | None) -> Hypothe
     tests.append(
         SuggestedTest(
             "period",
-            "Campagne à période lente (1 s)",
-            "Écarte une surcharge de l'esclave : si les défauts persistent à 1 s, c'est la ligne.",
+            tr("Campagne à période lente (1 s)"),
+            tr("Écarte une surcharge de l'esclave : si les défauts persistent à 1 s, c'est la ligne."),
             runnable=True,
             period_ms=1000,
             count=30,
@@ -381,9 +396,9 @@ def _rule_line_quality(st: SlaveStats, settings: LinkSettings | None) -> Hypothe
         score += 15
     return Hypothesis(
         "line",
-        CATALOGUE["line"].title,
+        tr(CATALOGUE["line"].title),
         _clamp(score),
-        CATALOGUE["line"].summary,
+        tr(CATALOGUE["line"].summary),
         st.slave_id,
         ev,
         tests,
@@ -397,23 +412,25 @@ def _rule_slow_slave(st: SlaveStats, settings: LinkSettings | None) -> Hypothesi
     if p95 < 0.6 * settings.response_timeout_ms:
         return None
     ev = [
-        f"P95 du temps de réponse {p95:.0f} ms pour un timeout de {settings.response_timeout_ms:.0f} ms",
-        f"{st.timeout} timeouts sur {st.total}",
+        tr("P95 du temps de réponse {p0:.0f} ms pour un timeout de {p1:.0f} ms").format(
+            p0=p95, p1=settings.response_timeout_ms
+        ),
+        tr("{p0} timeouts sur {p1}").format(p0=st.timeout, p1=st.total),
     ]
     tests = [
         SuggestedTest(
             "timeout_x2",
-            "Campagne avec timeout doublé",
-            "Si les timeouts disparaissent, l'esclave est simplement lent.",
+            tr("Campagne avec timeout doublé"),
+            tr("Si les timeouts disparaissent, l'esclave est simplement lent."),
             runnable=True,
             timeout_ms=2 * settings.response_timeout_ms,
         ),
     ]
     return Hypothesis(
         "slow",
-        CATALOGUE["slow"].title,
+        tr(CATALOGUE["slow"].title),
         _clamp(40 + 60 * min(1.0, p95 / settings.response_timeout_ms)),
-        CATALOGUE["slow"].summary,
+        tr(CATALOGUE["slow"].summary),
         st.slave_id,
         ev,
         tests,
@@ -424,46 +441,54 @@ def _rule_conflict(st: SlaveStats) -> Hypothesis | None:
     if st.total < MIN_SAMPLES or st.bad_response == 0:
         return None
     if st.echo >= st.bad_response * 0.8:
-        ev = [f"{st.echo} réponses identiques à la requête émise"]
+        ev = [tr("{p0} réponses identiques à la requête émise").format(p0=st.echo)]
         tests = [
             SuggestedTest(
                 "rts",
-                "Activer le pilotage RTS",
-                "CONFIGURATION > RTS : l'adaptateur renvoie l'écho de l'émission, il n'a pas de direction automatique.",
+                tr("Activer le pilotage RTS"),
+                tr(
+                    "CONFIGURATION > RTS : l'adaptateur renvoie l'écho de l'émission, il n'a pas de direction automatique."
+                ),
             ),
             SuggestedTest(
                 "adapter",
-                "Changer d'adaptateur USB/RS-485",
-                "Un adaptateur à direction automatique (CH340, FTDI avec TXDEN) supprime l'écho.",
+                tr("Changer d'adaptateur USB/RS-485"),
+                tr("Un adaptateur à direction automatique (CH340, FTDI avec TXDEN) supprime l'écho."),
             ),
         ]
         return Hypothesis(
             "echo",
-            CATALOGUE["echo"].title,
+            tr(CATALOGUE["echo"].title),
             _clamp(50 + 50 * st.bad_response / st.total),
-            CATALOGUE["echo"].summary,
+            tr(CATALOGUE["echo"].summary),
             st.slave_id,
             ev,
             tests,
         )
-    ev = [f"{st.bad_response} réponses au CRC juste mais incohérentes (autre esclave, autre fonction ou longueur)"]
+    ev = [
+        tr("{p0} réponses au CRC juste mais incohérentes (autre esclave, autre fonction ou longueur)").format(
+            p0=st.bad_response
+        )
+    ]
     if st.crc_error:
-        ev.append(f"{st.crc_error} réponses corrompues, compatibles avec des collisions")
+        ev.append(tr("{p0} réponses corrompues, compatibles avec des collisions").format(p0=st.crc_error))
     tests = [
         SuggestedTest(
             "sniff",
-            "Écouter le bus (onglet Espion)",
-            "Deux réponses à une même requête ou des collisions systématiques signent un doublon d'adresse.",
+            tr("Écouter le bus (onglet Espion)"),
+            tr("Deux réponses à une même requête ou des collisions systématiques signent un doublon d'adresse."),
         ),
         SuggestedTest(
-            "unplug", "Débrancher les esclaves un par un", "La réponse redevient cohérente quand le doublon est retiré."
+            "unplug",
+            tr("Débrancher les esclaves un par un"),
+            tr("La réponse redevient cohérente quand le doublon est retiré."),
         ),
     ]
     return Hypothesis(
         "conflict",
-        CATALOGUE["conflict"].title,
+        tr(CATALOGUE["conflict"].title),
         _clamp(40 + 60 * st.bad_response / st.total),
-        CATALOGUE["conflict"].summary,
+        tr(CATALOGUE["conflict"].summary),
         st.slave_id,
         ev,
         tests,
@@ -475,26 +500,26 @@ def _rule_exceptions(st: SlaveStats) -> Hypothesis | None:
         return None
     codes = ", ".join(f"{code:02X} ({exception_label(code)}) ×{n}" for code, n in st.exceptions_by_code.most_common())
     ev = [
-        f"{st.exception}/{st.total} exceptions Modbus : {codes}",
-        "la liaison est saine : l'esclave répond dans les temps",
+        tr("{p0}/{p1} exceptions Modbus : {p2}").format(p0=st.exception, p1=st.total, p2=codes),
+        tr("la liaison est saine : l'esclave répond dans les temps"),
     ]
     tests = [
         SuggestedTest(
             "mapping",
-            "Vérifier la table d'échange",
-            "Adresse de départ (base 0 ou 1 ?), type de registre (holding / input) et longueur autorisée.",
+            tr("Vérifier la table d'échange"),
+            tr("Adresse de départ (base 0 ou 1 ?), type de registre (holding / input) et longueur autorisée."),
         ),
         SuggestedTest(
             "fc_alt",
-            "Essayer FC04 / FC03 et longueur 1",
-            "Certains équipements refusent les lectures multiples ou n'exposent qu'un type de registres.",
+            tr("Essayer FC04 / FC03 et longueur 1"),
+            tr("Certains équipements refusent les lectures multiples ou n'exposent qu'un type de registres."),
         ),
     ]
     return Hypothesis(
         "exception",
-        CATALOGUE["exception"].title,
+        tr(CATALOGUE["exception"].title),
         _clamp(50 + 50 * st.exception_ratio),
-        CATALOGUE["exception"].summary,
+        tr(CATALOGUE["exception"].summary),
         st.slave_id,
         ev,
         tests,
@@ -514,23 +539,25 @@ def _rule_fragmentation(
     if len(truncated) < 2:
         return None
     ev = [
-        f"{len(truncated)} réponses très courtes ({', '.join(str(o.rx_length) for o in truncated[:5])} octets) : trames coupées en deux",
-        f"silence de fin de trame actuel : {settings.frame_gap_ms:.1f} ms",
+        tr("{p0} réponses très courtes ({p1} octets) : trames coupées en deux").format(
+            p0=len(truncated), p1=", ".join(str(o.rx_length) for o in truncated[:5])
+        ),
+        tr("silence de fin de trame actuel : {p0:.1f} ms").format(p0=settings.frame_gap_ms),
     ]
     tests = [
         SuggestedTest(
             "gap20",
-            "Campagne avec silence de fin de trame 20 ms",
-            "Si les erreurs disparaissent, l'adaptateur USB fragmente les réponses ; garder cette valeur.",
+            tr("Campagne avec silence de fin de trame 20 ms"),
+            tr("Si les erreurs disparaissent, l'adaptateur USB fragmente les réponses ; garder cette valeur."),
             runnable=True,
             inter_frame_delay_ms=20.0,
         ),
     ]
     return Hypothesis(
         "fragment",
-        CATALOGUE["fragment"].title,
+        tr(CATALOGUE["fragment"].title),
         _clamp(40 + 15 * len(truncated)),
-        CATALOGUE["fragment"].summary,
+        tr(CATALOGUE["fragment"].summary),
         st.slave_id,
         ev,
         tests,
@@ -542,24 +569,26 @@ def _rule_transport(stats: dict[int, SlaveStats]) -> Hypothesis | None:
     if n == 0:
         return None
     total = sum(st.total for st in stats.values())
-    ev = [f"{n} erreur(s) de liaison série sur {total} requêtes (port disparu, écriture refusée)"]
+    ev = [
+        tr("{p0} erreur(s) de liaison série sur {p1} requêtes (port disparu, écriture refusée)").format(p0=n, p1=total)
+    ]
     tests = [
         SuggestedTest(
             "usb",
-            "Changer de port USB et de câble",
-            "Un concentrateur USB ou un câble abîmé provoque des déconnexions de l'adaptateur.",
+            tr("Changer de port USB et de câble"),
+            tr("Un concentrateur USB ou un câble abîmé provoque des déconnexions de l'adaptateur."),
         ),
         SuggestedTest(
             "power",
-            "Vérifier l'alimentation de l'adaptateur",
-            "Les adaptateurs isolés alimentés par le bus décrochent si la tension chute.",
+            tr("Vérifier l'alimentation de l'adaptateur"),
+            tr("Les adaptateurs isolés alimentés par le bus décrochent si la tension chute."),
         ),
     ]
     return Hypothesis(
         "transport",
-        CATALOGUE["transport"].title,
+        tr(CATALOGUE["transport"].title),
         _clamp(40 + 20 * n),
-        CATALOGUE["transport"].summary,
+        tr(CATALOGUE["transport"].summary),
         None,
         ev,
         tests,
@@ -575,15 +604,19 @@ def _rule_healthy(stats: dict[int, SlaveStats]) -> Hypothesis | None:
     ok = sum(st.ok + st.exception for st in stats.values())
     if ok / total < 0.99:
         return None
-    ev = [f"{ok}/{total} échanges valides sur {len(stats)} esclave(s)"]
+    ev = [tr("{p0}/{p1} échanges valides sur {p2} esclave(s)").format(p0=ok, p1=total, p2=len(stats))]
     for st in stats.values():
         if st.rt_avg is not None:
-            ev.append(f"esclave {st.slave_id} : {st.rt_avg:.1f} ms en moyenne, max {st.rt_max:.1f} ms")
+            ev.append(
+                tr("esclave {p0} : {p1:.1f} ms en moyenne, max {p2:.1f} ms").format(
+                    p0=st.slave_id, p1=st.rt_avg, p2=st.rt_max
+                )
+            )
     return Hypothesis(
         "healthy",
-        CATALOGUE["healthy"].title,
+        tr(CATALOGUE["healthy"].title),
         _clamp(60 + 40 * ok / total),
-        CATALOGUE["healthy"].summary,
+        tr(CATALOGUE["healthy"].summary),
         None,
         ev,
         [],
@@ -629,7 +662,13 @@ class CampaignComparison:
         if r.error_ratio == 0 and b.error_ratio > 0:
             return "défauts disparus : hypothèse confirmée"
         if r.error_ratio < b.error_ratio * 0.5:
-            return f"défauts réduits ({_pct(b.error_ratio)} -> {_pct(r.error_ratio)}) : hypothèse probable"
+            return tr("défauts réduits ({p0} -> {p1}) : hypothèse probable").format(
+                p0=_pct(b.error_ratio), p1=_pct(r.error_ratio)
+            )
         if r.error_ratio > b.error_ratio * 1.5 and r.error_ratio > 0.05:
-            return f"défauts aggravés ({_pct(b.error_ratio)} -> {_pct(r.error_ratio)}) : hypothèse écartée"
-        return f"pas de changement notable ({_pct(b.error_ratio)} -> {_pct(r.error_ratio)}) : hypothèse peu probable"
+            return tr("défauts aggravés ({p0} -> {p1}) : hypothèse écartée").format(
+                p0=_pct(b.error_ratio), p1=_pct(r.error_ratio)
+            )
+        return tr("pas de changement notable ({p0} -> {p1}) : hypothèse peu probable").format(
+            p0=_pct(b.error_ratio), p1=_pct(r.error_ratio)
+        )

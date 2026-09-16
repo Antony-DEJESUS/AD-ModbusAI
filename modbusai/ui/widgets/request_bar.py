@@ -7,6 +7,7 @@ import enum
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QSpinBox, QWidget
 
+from modbusai.i18n import tr
 from modbusai.modbus.codec import Radix
 from modbusai.modbus.pdu import MAX_READ_BITS, MAX_READ_REGISTERS
 from modbusai.modbus.records import FunctionCode
@@ -75,13 +76,13 @@ class RequestBar(QFrame):
         self.count.setValue(1)
         self.reg_type = QComboBox()
         for t in RegisterType:
-            self.reg_type.addItem(t.label, t)
+            self.reg_type.addItem(tr(t.label), t)
         self.reg_type.setCurrentIndex(list(RegisterType).index(RegisterType.HOLDING))
         self.address = QLabel()
         self.address.setStyleSheet("font-weight: bold;")
         self.radix = QComboBox()
         for r in Radix:
-            self.radix.addItem(r.value, r)
+            self.radix.addItem(tr(r.value), r)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(6, 4, 6, 4)
@@ -94,9 +95,9 @@ class RequestBar(QFrame):
         for label, w in fields:
             layout.addWidget(QLabel(label))
             layout.addWidget(w)
-        layout.addWidget(QLabel("Adresse :"))
+        layout.addWidget(QLabel(tr("Adresse :")))
         layout.addWidget(self.address)
-        layout.addWidget(QLabel("Mode"))
+        layout.addWidget(QLabel(tr("Mode")))
         layout.addWidget(self.radix)
         layout.addStretch(1)
 

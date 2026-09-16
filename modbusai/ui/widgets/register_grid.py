@@ -7,13 +7,14 @@ from collections.abc import Sequence
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QTableWidget, QTableWidgetItem, QWidget
 
+from modbusai.i18n import tr
 from modbusai.modbus.codec import DisplayRow
 
 
 class RegisterGrid(QTableWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(0, 2, parent)
-        self.setHorizontalHeaderLabels(["N° Registre", "Valeur"])
+        self.setHorizontalHeaderLabels([tr("N° Registre"), tr("Valeur")])
         self.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.verticalHeader().setVisible(False)

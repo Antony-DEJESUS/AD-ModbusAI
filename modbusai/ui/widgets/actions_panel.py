@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modbusai.i18n import tr
 from modbusai.modbus.codec import DisplayMode, DisplayOptions, Radix
 
 
@@ -29,26 +30,26 @@ class ActionsPanel(QFrame):
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setFixedWidth(170)
 
-        self.read_btn = QPushButton("LECTURE")
-        self.write_btn = QPushButton("ECRITURE")
+        self.read_btn = QPushButton(tr("LECTURE"))
+        self.write_btn = QPushButton(tr("ECRITURE"))
         for b in (self.read_btn, self.write_btn):
             b.setMinimumHeight(30)
 
-        self.auto_reconnect = QCheckBox("Reconnexion auto")
-        self.cyclic = QCheckBox("Cyclique")
+        self.auto_reconnect = QCheckBox(tr("Reconnexion auto"))
+        self.cyclic = QCheckBox(tr("Cyclique"))
         self.cycle_btn = QPushButton("…")
         self.cycle_btn.setFixedWidth(28)
-        self.cycle_btn.setToolTip("Période du cycle (ms)")
-        self.stop_cycle_btn = QPushButton("ARRET CYCLE")
+        self.cycle_btn.setToolTip(tr("Période du cycle (ms)"))
+        self.stop_cycle_btn = QPushButton(tr("ARRET CYCLE"))
         self.stop_cycle_btn.setEnabled(False)
         self.cycle_period_ms = 1000
 
-        self.byte_swap = QCheckBox("Inversion Octets")
-        self.word_swap = QCheckBox("Inversion Mots")
-        self.unsigned = QCheckBox("Non signé")
+        self.byte_swap = QCheckBox(tr("Inversion Octets"))
+        self.word_swap = QCheckBox(tr("Inversion Mots"))
+        self.unsigned = QCheckBox(tr("Non signé"))
         self.display_mode = QComboBox()
         for m in DisplayMode:
-            self.display_mode.addItem(m.value, m)
+            self.display_mode.addItem(tr(m.value), m)
         self.display_mode.setCurrentIndex(list(DisplayMode).index(DisplayMode.WORD16))
         self.order_label = QLabel()
         self.order_label.setStyleSheet("color: #555;")
@@ -70,7 +71,7 @@ class ActionsPanel(QFrame):
         layout.addWidget(self.word_swap)
         layout.addWidget(self.unsigned)
         layout.addSpacing(6)
-        layout.addWidget(QLabel("Mode d'affichage"))
+        layout.addWidget(QLabel(tr("Mode d'affichage")))
         layout.addWidget(self.display_mode)
         layout.addWidget(self.order_label)
         layout.addStretch(1)
@@ -112,7 +113,9 @@ class ActionsPanel(QFrame):
         mode: DisplayMode = self.display_mode.currentData()
         self.word_swap.setEnabled(mode.is_multiword)
         opts = self.display_options(Radix.DEC)
-        self.order_label.setText(f"Ordre {16 * mode.words} bits : {opts.order_label}" if mode.is_multiword else "")
+        self.order_label.setText(
+            tr("Ordre {p0} bits : {p1}").format(p0=16 * mode.words, p1=opts.order_label) if mode.is_multiword else ""
+        )
         self.display_changed.emit()
 
     def _ask_period(self) -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFormLayout, QFrame, QGroupBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from modbusai.i18n import tr
 from modbusai.modbus.records import ExchangeRecord
 
 
@@ -16,8 +17,8 @@ class ExchangePanel(QFrame):
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setMinimumWidth(300)
 
-        self.clear_btn = QPushButton("EFFACER")
-        self.clear_btn.setToolTip("Vider la grille, le dernier échange et le journal")
+        self.clear_btn = QPushButton(tr("EFFACER"))
+        self.clear_btn.setToolTip(tr("Vider la grille, le dernier échange et le journal"))
         self.clear_btn.clicked.connect(self.clear_requested)
 
         buttons = QHBoxLayout()
@@ -35,14 +36,14 @@ class ExchangePanel(QFrame):
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.addRow("Résultat", self.status)
-        form.addRow("Temps de réponse", self.response_time)
-        form.addRow("Transaction", self.transaction_time)
-        form.addRow("Trame émise", self.tx)
-        form.addRow("Trame reçue", self.rx)
-        form.addRow("Réception", self.rx_detail)
-        form.addRow("Erreur", self.error)
-        box = QGroupBox("Dernier échange")
+        form.addRow(tr("Résultat"), self.status)
+        form.addRow(tr("Temps de réponse"), self.response_time)
+        form.addRow(tr("Transaction"), self.transaction_time)
+        form.addRow(tr("Trame émise"), self.tx)
+        form.addRow(tr("Trame reçue"), self.rx)
+        form.addRow(tr("Réception"), self.rx_detail)
+        form.addRow(tr("Erreur"), self.error)
+        box = QGroupBox(tr("Dernier échange"))
         box.setLayout(form)
 
         layout = QVBoxLayout(self)

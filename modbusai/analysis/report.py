@@ -8,6 +8,7 @@ from modbusai import APP_TITLE
 from modbusai.analysis.diagnostic import CampaignComparison, Hypothesis
 from modbusai.analysis.observations import SlaveStats
 from modbusai.analysis.stress import StressReport
+from modbusai.i18n import tr
 from modbusai.transport.records import LinkSettings
 
 _LINE = "-" * 78
@@ -27,14 +28,14 @@ def build_report(
     sources_label: str = "",
 ) -> str:
     lines: list[str] = []
-    lines.append(f"{APP_TITLE} - rapport de diagnostic Modbus")
-    lines.append(f"Date : {datetime.now():%d/%m/%Y %H:%M:%S}")
-    lines.append(f"Liaison : {settings.summary() if settings is not None else '-'}")
+    lines.append(tr("{p0} - rapport de diagnostic Modbus").format(p0=APP_TITLE))
+    lines.append(tr("Date : {p0:%d/%m/%Y %H:%M:%S}").format(p0=datetime.now()))
+    lines.append(tr("Liaison : {p0}").format(p0=settings.summary() if settings is not None else "-"))
     if sources_label:
-        lines.append(f"Sources : {sources_label}")
-    lines.append(f"Observations : {observations_count}")
+        lines.append(tr("Sources : {p0}").format(p0=sources_label))
+    lines.append(tr("Observations : {p0}").format(p0=observations_count))
     lines.append(_LINE)
-    lines.append("STATISTIQUES PAR ESCLAVE")
+    lines.append(tr("STATISTIQUES PAR ESCLAVE"))
     lines.append(
         f"{'Esclave':>7} {'Échanges':>9} {'Réussite':>9} {'Timeout':>8} {'CRC':>5} {'Excep.':>7} {'Incoh.':>7} {'Liaison':>8} {'Moy ms':>8} {'P95 ms':>8} {'Max ms':>8} {'Gigue':>7}"
     )
@@ -46,36 +47,36 @@ def build_report(
         )
         if st.exceptions_by_code:
             codes = ", ".join(f"{c:02X} x{n}" for c, n in st.exceptions_by_code.most_common())
-            lines.append(f"{'':>7} exceptions : {codes}")
+            lines.append(tr("{p0:>7} exceptions : {p1}").format(p0="", p1=codes))
     if not stats:
-        lines.append("  (aucune)")
+        lines.append(tr("  (aucune)"))
     lines.append(_LINE)
-    lines.append("HYPOTHÈSES CLASSÉES (score 0-100 : 0-49 peu probable, 50-74 probable, 75-100 très probable)")
+    lines.append(tr("HYPOTHÈSES CLASSÉES (score 0-100 : 0-49 peu probable, 50-74 probable, 75-100 très probable)"))
     if not hypotheses:
-        lines.append("  Pas assez de données.")
+        lines.append(tr("  Pas assez de données."))
     for h in hypotheses:
         lines.append(f"[{h.score:3d}] {h.title} ({h.scope})")
         lines.append(f"      {h.summary}")
         for e in h.evidence:
             lines.append(f"      - {e}")
         for t in h.tests:
-            lines.append(f"      test : {t.title} - {t.description}")
+            lines.append(tr("      test : {p0} - {p1}").format(p0=t.title, p1=t.description))
     if comparisons:
         lines.append(_LINE)
-        lines.append("TESTS EXÉCUTÉS")
+        lines.append(tr("TESTS EXÉCUTÉS"))
         for c in comparisons:
             b, r = c.baseline, c.result
-            lines.append(f"* {c.test.title} (esclave {b.slave_id})")
+            lines.append(tr("* {p0} (esclave {p1})").format(p0=c.test.title, p1=b.slave_id))
             lines.append(
                 f"    référence : {b.total} échanges, {100 * b.error_ratio:.0f} % de défauts, {_fmt(b.rt_avg, ' ms')}"
             )
             lines.append(
                 f"    test      : {r.total} échanges, {100 * r.error_ratio:.0f} % de défauts, {_fmt(r.rt_avg, ' ms')}"
             )
-            lines.append(f"    verdict   : {c.verdict()}")
+            lines.append(tr("    verdict   : {p0}").format(p0=c.verdict()))
     if stress is not None and stress.results:
         lines.append(_LINE)
-        lines.append("TEST DE TORTURE")
+        lines.append(tr("TEST DE TORTURE"))
         for r in stress.results:
             st = r.stats
             lines.append(

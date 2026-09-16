@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from modbusai.i18n import tr
+
 EXCEPTION_LABELS: dict[int, str] = {
     0x01: "Fonction illégale",
     0x02: "Adresse de donnée illégale",
@@ -17,7 +19,8 @@ EXCEPTION_LABELS: dict[int, str] = {
 
 
 def exception_label(code: int) -> str:
-    return EXCEPTION_LABELS.get(code, f"Exception inconnue 0x{code:02X}")
+    label = EXCEPTION_LABELS.get(code)
+    return tr(label) if label is not None else tr("Exception inconnue 0x{p0:02X}").format(p0=code)
 
 
 class ModbusError(Exception):

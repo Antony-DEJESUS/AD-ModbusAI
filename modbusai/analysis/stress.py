@@ -8,6 +8,7 @@ from dataclasses import dataclass, field, replace
 
 from modbusai.analysis.campaign import CampaignSpec
 from modbusai.analysis.observations import SlaveStats
+from modbusai.i18n import tr
 from modbusai.modbus.records import FunctionCode, Request
 from modbusai.transport.records import LinkSettings, SerialSettings
 
@@ -61,45 +62,51 @@ def default_scenario(
     phases: list[StressPhase] = [
         StressPhase(
             "ref",
-            "Référence",
-            "Rythme lent, lecture courte : point de comparaison.",
-            CampaignSpec(req, period_ms=500, label="Référence"),
+            tr("Référence"),
+            tr("Rythme lent, lecture courte : point de comparaison."),
+            CampaignSpec(req, period_ms=500, label=tr("Référence")),
         ),
         StressPhase(
             "burst",
-            "Rafale",
-            "Période minimale : révèle un esclave surchargé (temps de réponse qui grimpe, timeouts).",
-            CampaignSpec(req, period_ms=20, label="Rafale"),
+            tr("Rafale"),
+            tr("Période minimale : révèle un esclave surchargé (temps de réponse qui grimpe, timeouts)."),
+            CampaignSpec(req, period_ms=20, label=tr("Rafale")),
         ),
         StressPhase(
             "long",
-            "Trames longues",
-            f"Lecture de {long_count} éléments : révèle une ligne bruitée (les longues trames ont plus de chances d'être corrompues).",
-            CampaignSpec(replace(req, count=long_count), period_ms=200, label="Trames longues"),
+            tr("Trames longues"),
+            tr(
+                "Lecture de {p0} éléments : révèle une ligne bruitée (les longues trames ont plus de chances d'être corrompues)."
+            ).format(p0=long_count),
+            CampaignSpec(replace(req, count=long_count), period_ms=200, label=tr("Trames longues")),
         ),
         StressPhase(
             "tight",
-            "Timeout serré",
-            "Timeout à 50 ms : mesure la part des réponses lentes.",
-            CampaignSpec(req, period_ms=200, timeout_ms=50.0, label="Timeout serré"),
+            tr("Timeout serré"),
+            tr("Timeout à 50 ms : mesure la part des réponses lentes."),
+            CampaignSpec(req, period_ms=200, timeout_ms=50.0, label=tr("Timeout serré")),
         ),
     ]
     if other_slaves:
         phases.append(
             StressPhase(
                 "multi",
-                "Alternance d'esclaves",
-                "Interroge tour à tour tous les esclaves connus : un bus qui souffre quand plusieurs répondent signe un conflit ou une polarisation faible.",
-                CampaignSpec(req, period_ms=100, label="Alternance"),
+                tr("Alternance d'esclaves"),
+                tr(
+                    "Interroge tour à tour tous les esclaves connus : un bus qui souffre quand plusieurs répondent signe un conflit ou une polarisation faible."
+                ),
+                CampaignSpec(req, period_ms=100, label=tr("Alternance")),
             )
         )
     if isinstance(settings, SerialSettings) and settings.baudrate > 9600:
         phases.append(
             StressPhase(
                 "slow",
-                "Vitesse réduite",
-                "9600 bauds : si les défauts disparaissent, la ligne (longueur, terminaisons) est en cause. L'esclave doit accepter 9600.",
-                CampaignSpec(req, period_ms=200, baudrate=9600, label="9600 bauds"),
+                tr("Vitesse réduite"),
+                tr(
+                    "9600 bauds : si les défauts disparaissent, la ligne (longueur, terminaisons) est en cause. L'esclave doit accepter 9600."
+                ),
+                CampaignSpec(req, period_ms=200, baudrate=9600, label=tr("9600 bauds")),
             )
         )
     share = max(10.0, total_duration_s / len(phases))
@@ -112,7 +119,7 @@ def evaluate(results: list[PhaseResult]) -> StressReport:
     by_key = {r.phase.key: r for r in results}
     ref = by_key.get("ref")
     if ref is None or ref.stats.total == 0:
-        report.conclusions.append("Phase de référence absente ou vide : pas de comparaison possible.")
+        report.conclusions.append(tr("Phase de référence absente ou vide : pas de comparaison possible."))
         return report
     concl = report.conclusions
     ref_err = ref.error_ratio
@@ -125,12 +132,16 @@ def evaluate(results: list[PhaseResult]) -> StressReport:
     if burst and burst.stats.total:
         worse = burst.error_ratio - ref_err
         slower = (burst.rt_avg or 0) - (ref.rt_avg or 0)
-        concl.append(f"Rafale : {100 * burst.error_ratio:.0f} % de défauts, {burst.rt_avg or 0:.1f} ms en moyenne.")
+        concl.append(
+            tr("Rafale : {p0:.0f} % de défauts, {p1:.1f} ms en moyenne.").format(
+                p0=100 * burst.error_ratio, p1=burst.rt_avg or 0
+            )
+        )
         if worse > 0.05 or slower > 0.5 * (ref.rt_avg or 1):
             scores["charge"] = worse * 100 + (slower / max(ref.rt_avg or 1, 1)) * 20
-            concl.append("  -> se dégrade en rafale : l'esclave ou la passerelle peine à suivre la cadence.")
+            concl.append(tr("  -> se dégrade en rafale : l'esclave ou la passerelle peine à suivre la cadence."))
         else:
-            concl.append("  -> tient la cadence : pas de surcharge de l'esclave.")
+            concl.append(tr("  -> tient la cadence : pas de surcharge de l'esclave."))
 
     longp = by_key.get("long")
     if longp and longp.stats.total:
@@ -148,19 +159,23 @@ def evaluate(results: list[PhaseResult]) -> StressReport:
                 "  -> corrompues plus souvent que les courtes : signature d'une ligne bruitée ou mal terminée."
             )
         else:
-            concl.append("  -> pas plus de défauts que les courtes : la ligne transmet proprement.")
+            concl.append(tr("  -> pas plus de défauts que les courtes : la ligne transmet proprement."))
 
     tight = by_key.get("tight")
     if tight and tight.stats.total:
-        concl.append(f"Timeout serré (50 ms) : {100 * tight.stats.timeout_ratio:.0f} % de réponses au-delà de 50 ms.")
+        concl.append(
+            tr("Timeout serré (50 ms) : {p0:.0f} % de réponses au-delà de 50 ms.").format(
+                p0=100 * tight.stats.timeout_ratio
+            )
+        )
         if tight.stats.timeout_ratio > 0.5:
             scores["lent"] = tight.stats.timeout_ratio * 60
-            concl.append("  -> esclave lent : prévoir un timeout confortable dans la supervision.")
+            concl.append(tr("  -> esclave lent : prévoir un timeout confortable dans la supervision."))
 
     multi = by_key.get("multi")
     if multi and multi.stats.total:
         worse = multi.error_ratio - ref_err
-        concl.append(f"Alternance : {100 * multi.error_ratio:.0f} % de défauts.")
+        concl.append(tr("Alternance : {p0:.0f} % de défauts.").format(p0=100 * multi.error_ratio))
         if worse > 0.05:
             scores["bus"] = worse * 100
             concl.append(
@@ -169,14 +184,14 @@ def evaluate(results: list[PhaseResult]) -> StressReport:
 
     slow = by_key.get("slow")
     if slow and slow.stats.total:
-        concl.append(f"9600 bauds : {100 * slow.error_ratio:.0f} % de défauts.")
+        concl.append(tr("9600 bauds : {p0:.0f} % de défauts.").format(p0=100 * slow.error_ratio))
         if ref_err > 0.05 and slow.error_ratio < ref_err * 0.5:
             scores["ligne"] = scores.get("ligne", 0) + 40
             concl.append(
                 "  -> nettement mieux à vitesse réduite : la ligne est en cause (longueur, terminaisons, bruit)."
             )
         elif slow.error_ratio >= ref_err and ref_err > 0.05:
-            concl.append("  -> pas mieux à vitesse réduite : le défaut n'est pas lié à la vitesse.")
+            concl.append(tr("  -> pas mieux à vitesse réduite : le défaut n'est pas lié à la vitesse."))
 
     if not scores:
         report.orientation = (
@@ -187,9 +202,15 @@ def evaluate(results: list[PhaseResult]) -> StressReport:
     else:
         best = max(scores, key=scores.get)
         report.orientation = {
-            "charge": "Orientation : esclave ou passerelle surchargé. Réduire la cadence de scrutation ou regrouper les lectures.",
-            "ligne": "Orientation : qualité de ligne. Vérifier terminaisons 120 Ω, polarisation, longueur, blindage ; réduire la vitesse si possible.",
-            "lent": "Orientation : esclave lent. Augmenter le timeout de la supervision.",
-            "bus": "Orientation : bus multi-esclaves fragile. Vérifier polarisation, terminaisons et unicité des adresses.",
+            "charge": tr(
+                "Orientation : esclave ou passerelle surchargé. Réduire la cadence de scrutation ou regrouper les lectures."
+            ),
+            "ligne": tr(
+                "Orientation : qualité de ligne. Vérifier terminaisons 120 Ω, polarisation, longueur, blindage ; réduire la vitesse si possible."
+            ),
+            "lent": tr("Orientation : esclave lent. Augmenter le timeout de la supervision."),
+            "bus": tr(
+                "Orientation : bus multi-esclaves fragile. Vérifier polarisation, terminaisons et unicité des adresses."
+            ),
         }[best]
     return report

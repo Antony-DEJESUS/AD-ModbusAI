@@ -10,6 +10,8 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass
 
+from modbusai.i18n import tr
+
 
 class Role(enum.Enum):
     IDLE = "aucun"
@@ -41,12 +43,12 @@ def tab_states(role: Role, connected: bool, busy_tab: Tab | None = None) -> dict
     if role is Role.SNIFFER:
         for t in Tab:
             if t is not Tab.SNIFFER:
-                states[t] = TabState(False, "Arrêtez l'écoute (onglet ESPION) pour libérer le port.")
+                states[t] = TabState(False, tr("Arrêtez l'écoute (onglet ESPION) pour libérer le port."))
         return states
     if role is Role.SLAVE:
         for t in Tab:
             if t is not Tab.SLAVE:
-                states[t] = TabState(False, "Arrêtez le serveur esclave pour libérer le port.")
+                states[t] = TabState(False, tr("Arrêtez le serveur esclave pour libérer le port."))
         return states
     if busy_tab is not None:
         for t in Tab:
@@ -56,25 +58,25 @@ def tab_states(role: Role, connected: bool, busy_tab: Tab | None = None) -> dict
                 )
         return states
     if role is Role.MASTER and connected:
-        states[Tab.SNIFFER] = TabState(False, "Cliquez sur DECONNEXION pour passer en espion.")
-        states[Tab.SLAVE] = TabState(False, "Cliquez sur DECONNEXION pour lancer le serveur esclave.")
+        states[Tab.SNIFFER] = TabState(False, tr("Cliquez sur DECONNEXION pour passer en espion."))
+        states[Tab.SLAVE] = TabState(False, tr("Cliquez sur DECONNEXION pour lancer le serveur esclave."))
     return states
 
 
 def can_start(role: Role, connected: bool, wanted: Role, busy: bool) -> tuple[bool, str]:
     """Peut-on démarrer ``wanted`` depuis l'état courant ?"""
     if busy:
-        return False, "Une activité est en cours : arrêtez-la d'abord."
+        return False, tr("Une activité est en cours : arrêtez-la d'abord.")
     if wanted is Role.MASTER:
         if role is Role.IDLE:
             return True, ""
         if role is Role.MASTER:
-            return (not connected), "Déjà connecté."
-        return False, "Arrêtez d'abord l'espion ou le serveur esclave : le port est occupé."
+            return (not connected), tr("Déjà connecté.")
+        return False, tr("Arrêtez d'abord l'espion ou le serveur esclave : le port est occupé.")
     if role is Role.IDLE:
         return True, ""
     if role is Role.MASTER and connected:
-        return False, "Cliquez sur DECONNEXION avant de changer de rôle."
+        return False, tr("Cliquez sur DECONNEXION avant de changer de rôle.")
     if role is Role.MASTER:
         return True, ""
-    return False, "Un autre rôle occupe déjà le port."
+    return False, tr("Un autre rôle occupe déjà le port.")

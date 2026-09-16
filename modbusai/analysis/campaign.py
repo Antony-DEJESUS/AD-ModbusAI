@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+from modbusai.i18n import tr
 from modbusai.modbus.records import FunctionCode, Request
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings
 
@@ -70,21 +71,21 @@ class CampaignSpec:
             f"esclave {self.request.slave_id}",
             f"FC{int(self.request.function):02d} @{self.request.address} x{self.request.count}",
         ]
-        parts.append(f"période {self.period_ms} ms")
+        parts.append(tr("période {p0} ms").format(p0=self.period_ms))
         if self.duration_s is not None:
             parts.append(f"{self.duration_s:.0f} s")
         if self.max_count is not None:
-            parts.append(f"max {self.max_count} lectures")
+            parts.append(tr("max {p0} lectures").format(p0=self.max_count))
         if self.timeout_ms is not None:
-            parts.append(f"timeout {self.timeout_ms:.0f} ms")
+            parts.append(tr("timeout {p0:.0f} ms").format(p0=self.timeout_ms))
         if self.baudrate is not None:
-            parts.append(f"{self.baudrate} bauds")
+            parts.append(tr("{p0} bauds").format(p0=self.baudrate))
         if self.parity is not None:
-            parts.append(f"parité {self.parity.name.lower()}")
+            parts.append(tr("parité {p0}").format(p0=self.parity.name.lower()))
         if self.stopbits is not None:
-            parts.append(f"{self.stopbits:g} stop")
+            parts.append(tr("{p0:g} stop").format(p0=self.stopbits))
         if self.inter_frame_delay_ms is not None:
-            parts.append(f"silence {self.inter_frame_delay_ms:g} ms")
+            parts.append(tr("silence {p0:g} ms").format(p0=self.inter_frame_delay_ms))
         return ", ".join(parts)
 
 

@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modbusai.i18n import tr
 from modbusai.transport.ports import list_serial_ports
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
 from modbusai.ui.network_tools import PingWorker, network_connections_available, open_network_connections
@@ -39,7 +40,7 @@ class SerialForm(QWidget):
         self.port.setEditable(True)  # permet de saisir un COM non détecté
         refresh = QPushButton("↻")
         refresh.setFixedWidth(28)
-        refresh.setToolTip("Rafraîchir la liste des ports")
+        refresh.setToolTip(tr("Rafraîchir la liste des ports"))
         refresh.clicked.connect(self._refresh_ports)
         port_row = QHBoxLayout()
         port_row.setContentsMargins(0, 0, 0, 0)
@@ -65,8 +66,8 @@ class SerialForm(QWidget):
         for p, label in _PARITY_LABELS.items():
             self.parity.addItem(label, p)
 
-        self.dtr = QCheckBox("Activer DTR")
-        self.rts = QCheckBox("Piloter RTS pendant l'émission (direction RS-485)")
+        self.dtr = QCheckBox(tr("Activer DTR"))
+        self.rts = QCheckBox(tr("Piloter RTS pendant l'émission (direction RS-485)"))
 
         self.timeout = QSpinBox()
         self.timeout.setRange(20, 60000)
@@ -78,7 +79,7 @@ class SerialForm(QWidget):
         self.inter_frame.setDecimals(2)
         self.inter_frame.setSingleStep(0.5)
         self.inter_frame.setSuffix(" ms")
-        self.inter_frame.setSpecialValueText("Auto (T3.5, plancher 5 ms)")
+        self.inter_frame.setSpecialValueText(tr("Auto (T3.5, plancher 5 ms)"))
         self.inter_frame.setToolTip(
             "Silence déclarant la fin d'une trame. 0 = automatique : 3,5 caractères selon la norme, "
             "avec un plancher de 5 ms pour absorber la latence des adaptateurs USB."
@@ -86,15 +87,15 @@ class SerialForm(QWidget):
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.addRow("SerialPortName", port_widget)
-        form.addRow("BaudRate", self.baudrate)
-        form.addRow("DataBits", self.databits)
-        form.addRow("StopBits", self.stopbits)
-        form.addRow("Parity", self.parity)
-        form.addRow("DTR", self.dtr)
-        form.addRow("RTS", self.rts)
-        form.addRow("TimeOut", self.timeout)
-        form.addRow("Délai inter-trames", self.inter_frame)
+        form.addRow(tr("SerialPortName"), port_widget)
+        form.addRow(tr("BaudRate"), self.baudrate)
+        form.addRow(tr("DataBits"), self.databits)
+        form.addRow(tr("StopBits"), self.stopbits)
+        form.addRow(tr("Parity"), self.parity)
+        form.addRow(tr("DTR"), self.dtr)
+        form.addRow(tr("RTS"), self.rts)
+        form.addRow(tr("TimeOut"), self.timeout)
+        form.addRow(tr("Délai inter-trames"), self.inter_frame)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -166,7 +167,7 @@ class TcpForm(QWidget):
         super().__init__(parent)
         self._ping: PingWorker | None = None
         self.host = QLineEdit(current.host)
-        self.host.setPlaceholderText("192.168.1.10 ou nom d'hôte")
+        self.host.setPlaceholderText(tr("192.168.1.10 ou nom d'hôte"))
         self.port = QSpinBox()
         self.port.setRange(1, 65535)
         self.port.setValue(current.port)
@@ -181,24 +182,24 @@ class TcpForm(QWidget):
         self.connect_timeout.setSuffix(" ms")
         self.connect_timeout.setValue(int(current.connect_timeout_ms))
 
-        self.ping_btn = QPushButton("PING")
-        self.ping_btn.setToolTip("Envoie 4 pings système vers l'hôte, sans bloquer l'interface")
-        self.net_btn = QPushButton("Connexions réseau")
-        self.net_btn.setToolTip("Ouvre le panneau Windows « Connexions réseau » (ncpa.cpl)")
+        self.ping_btn = QPushButton(tr("PING"))
+        self.ping_btn.setToolTip(tr("Envoie 4 pings système vers l'hôte, sans bloquer l'interface"))
+        self.net_btn = QPushButton(tr("Connexions réseau"))
+        self.net_btn.setToolTip(tr("Ouvre le panneau Windows « Connexions réseau » (ncpa.cpl)"))
         self.net_btn.setEnabled(network_connections_available())
         if not network_connections_available():
-            self.net_btn.setToolTip("Disponible uniquement sous Windows")
+            self.net_btn.setToolTip(tr("Disponible uniquement sous Windows"))
         self.ping_output = QPlainTextEdit()
         self.ping_output.setReadOnly(True)
         self.ping_output.setMaximumHeight(120)
-        self.ping_output.setPlaceholderText("Résultat du ping")
+        self.ping_output.setPlaceholderText(tr("Résultat du ping"))
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.addRow("Hôte", self.host)
-        form.addRow("Port", self.port)
-        form.addRow("TimeOut réponse", self.timeout)
-        form.addRow("TimeOut connexion", self.connect_timeout)
+        form.addRow(tr("Hôte"), self.host)
+        form.addRow(tr("Port"), self.port)
+        form.addRow(tr("TimeOut réponse"), self.timeout)
+        form.addRow(tr("TimeOut connexion"), self.connect_timeout)
         tools = QHBoxLayout()
         tools.addWidget(self.ping_btn)
         tools.addWidget(self.net_btn)
@@ -221,7 +222,7 @@ class TcpForm(QWidget):
     def _ping_host(self) -> None:
         if self._ping is not None and self._ping.isRunning():
             return
-        self.ping_output.setPlainText(f"Ping vers {self.host.text().strip()}…")
+        self.ping_output.setPlainText(tr("Ping vers {p0}…").format(p0=self.host.text().strip()))
         self.ping_btn.setEnabled(False)
         self._ping = PingWorker(self.host.text(), parent=self)
         self._ping.finished_with.connect(self._on_ping_done)
@@ -250,7 +251,7 @@ class ConfigDialog(QDialog):
 
     def __init__(self, protocol: str, serial: SerialSettings, tcp: TcpSettings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Configuration de la liaison")
+        self.setWindowTitle(tr("Configuration de la liaison"))
         self.setModal(True)
         self.protocol = protocol
         self.serial_form = SerialForm(serial)
@@ -259,9 +260,9 @@ class ConfigDialog(QDialog):
         self.stack.addWidget(self.serial_form)
         self.stack.addWidget(self.tcp_form)
         self.stack.setCurrentIndex(1 if protocol == "TCP" else 0)
-        title = QLabel("Liaison Modbus TCP" if protocol == "TCP" else "Liaison série (Modbus RTU)")
+        title = QLabel(tr("Liaison Modbus TCP") if protocol == "TCP" else "Liaison série (Modbus RTU)")
         title.setStyleSheet("font-weight: bold;")
-        close_btn = QPushButton("FERMER")
+        close_btn = QPushButton(tr("FERMER"))
         close_btn.setDefault(True)
         close_btn.clicked.connect(self.accept)
         layout = QVBoxLayout(self)
