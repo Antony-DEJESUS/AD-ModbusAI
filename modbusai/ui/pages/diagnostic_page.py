@@ -27,8 +27,10 @@ from modbusai.analysis.observations import SlaveStats
 from modbusai.analysis.session import SessionStore
 from modbusai.transport.records import SerialSettings
 
+# Par défaut, le scan est exclu : ses adresses absentes ne sont pas des pannes à expliquer.
 SOURCES = (
-    ("Toutes les sources", None),
+    ("Maître, espion et tests", ["maitre", "espion", "test"]),
+    ("Toutes les sources (avec scan)", None),
     ("Maître", ["maitre"]),
     ("Espion", ["espion"]),
     ("Scan", ["scan"]),

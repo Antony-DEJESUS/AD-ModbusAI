@@ -215,6 +215,7 @@ class ScanPage(QWidget):
         for col, text in enumerate(cells):
             it = QTableWidgetItem(text)
             it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            it.setToolTip(text)
             if col == 1:
                 it.setForeground(QColor(color))
             if col in (0, 2):
