@@ -5,6 +5,43 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 0.3.0 - Phase 3 : TCP, diagnostic autonome, torture, export, FR/EN, habillage
+
+- Modbus TCP en plus du RTU : choix du protocole dans le bandeau, dialogue de
+  configuration à deux volets (série / réseau), maître et serveur esclave TCP
+  (plusieurs clients), enveloppe MBAP, PING système et accès aux « Connexions
+  réseau » Windows (ncpa.cpl). L'espion reste RTU (une recopie de port serait
+  nécessaire en TCP) et le bouton l'explique.
+- Onglet Diagnostic autonome : il choisit sa cible (esclave, type, registre,
+  longueur, période) et lance ses campagnes sans passer par l'onglet Maître ;
+  la liaison est ouverte automatiquement si besoin.
+- Campagnes minutées : durée (deux minutes par défaut) ou nombre de lectures,
+  compte à rebours et progression ; les tests d'hypothèses durent aussi deux
+  minutes par défaut.
+- Test de torture : phases enchaînées (référence, rafale, trames longues,
+  timeout serré, alternance d'esclaves, vitesse réduite) puis lecture croisée
+  et orientation (surcharge, ligne, esclave lent, bus fragile, sain).
+- Export du diagnostic en texte (statistiques, hypothèses, tests exécutés,
+  torture), UTF-8 avec BOM pour le Bloc-notes.
+- Légende des scores de diagnostic et bouton AIDE : catalogue de toutes les
+  hypothèses (déclenchement, causes classiques, comment confirmer), généré
+  depuis les règles elles-mêmes.
+- Scan réseau : liaison au choix (paramètres courants, personnalisés, ou
+  balayage d'une sélection de vitesses et de trames 8N1 / 8E1 / 8O1 / 8N2).
+- Blocages entre onglets : espion et serveur esclave verrouillent les autres
+  onglets, le maître connecté verrouille espion et esclave, une activité
+  longue verrouille son onglet seul ; raison en info-bulle, table testée.
+- Interface français / anglais (sélecteur dans le bandeau, mémorisé, fenêtre
+  recréée à la volée), analyse et rapport traduits ; test garantissant que
+  toute clé du code a sa traduction.
+- Habillage : feuille de style commune aux deux thèmes (coins arrondis,
+  bordures discrètes, police système), logo AD Automation dans le bandeau et
+  en icône, pop-up À propos (logo, version, règle de versionnage, historique,
+  mode d'emploi court) ouverte par la mention « Fait avec Claude Code par
+  Antony DE JESUS ».
+- Couche modbus : `ModbusMaster` générique (enveloppe RTU ou TCP), `SlaveHandler`
+  au niveau PDU ; couche transport : `TcpLink`, `TcpServer`, `TcpSettings`.
+
 ## 0.2.0 - Phase 2 : onglets Espion, Scan réseau, Diagnostic, Serveur esclave
 
 - Fenêtre à onglets : MAÎTRE (page de la phase 1), ESPION, SCAN RÉSEAU,

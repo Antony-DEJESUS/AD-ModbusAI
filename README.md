@@ -1,17 +1,17 @@
 # ModbusAI
 
-Outil de diagnostic Modbus RTU / RS-485 pour le chantier (GTB, industriel).
-Cinq onglets, un seul port série :
+Outil de diagnostic Modbus RTU / RS-485 et Modbus TCP pour le chantier (GTB,
+industriel), en français ou en anglais. Cinq onglets, un seul port à la fois :
 
 | Onglet | Rôle |
 |---|---|
 | MAÎTRE | lecture / écriture façon Modbus Doctor, cyclique, reconnexion auto, formats 8 à 64 bits et flottants |
-| ESPION | écoute passive du bus (aucune émission) : requêtes, réponses, temps, trames brutes, stats par esclave |
-| SCAN RÉSEAU | recherche des esclaves présents, identification FC43 / FC17, balayage des vitesses et parités |
-| DIAGNOSTIC | statistiques par esclave, hypothèses de panne classées, tests pour les départager |
-| SERVEUR ESCLAVE | simulateur d'esclave façon Mod_RSsim, avec injection de défauts |
+| ESPION | écoute passive du bus RS-485 (aucune émission) : requêtes, réponses, temps, trames brutes, stats par esclave |
+| SCAN RÉSEAU | recherche des esclaves présents, identification FC43 / FC17, liaison au choix ou balayage des vitesses et parités |
+| DIAGNOSTIC | campagnes minutées, test de torture, statistiques, hypothèses classées avec légende et aide, tests pour départager, export txt |
+| SERVEUR ESCLAVE | simulateur d'esclave façon Mod_RSsim (RTU ou TCP) avec injection de défauts |
 
-Version : voir la barre de titre (`modbusai/__init__.py`) et `CHANGELOG.md`.
+Version : barre de titre et pop-up À propos (`modbusai/__init__.py`), historique dans `CHANGELOG.md`.
 
 ## Lancer depuis les sources
 
@@ -28,7 +28,8 @@ py -m venv .venv
 .venv\Scripts\pyinstaller packaging\modbusai.spec
 ```
 
-Résultat : `dist\ModbusAI_v<version>.exe`, sans installateur.
+Résultat : `dist\ModbusAI_v<version>.exe`, sans installateur, avec le logo AD
+Automation en icône.
 
 ## Tests
 
@@ -37,22 +38,26 @@ Résultat : `dist\ModbusAI_v<version>.exe`, sans installateur.
 ```
 
 Sous Windows, les tests sur pseudo-terminal et bus virtuel sont ignorés ; les
-autres (CRC, trames, codec, framer, maître simulé, analyse, serveur esclave)
-tournent partout.
+autres (CRC, trames RTU et TCP, codec, framer, maître simulé, analyse,
+diagnostic, torture, rapport, serveur esclave, rôles, traductions) tournent
+partout.
 
 ## Utilisation rapide
 
-1. `CONFIGURATION` : port COM (détection automatique), vitesse, parité, bits,
-   DTR / RTS, timeout, délai inter-trames (0 = automatique).
-2. `CONNEXION` ouvre le port en maître. Les onglets Maître, Scan réseau et
-   Diagnostic utilisent cette liaison.
-3. `ESPION` et `SERVEUR ESCLAVE` ont leur propre bouton de démarrage : ils
-   prennent le port (la liaison maître est fermée) et le rendent à l'arrêt.
-   Cliquer ensuite sur `CONNEXION` pour repasser en maître.
-4. Diagnostic : faire des lectures (idéalement en cyclique), écouter le bus ou
-   scanner, puis `ANALYSER`. Chaque hypothèse liste ses indices et des tests ;
-   `LANCER` exécute une campagne de lectures avec les paramètres modifiés et
-   compare le taux de défauts à la référence.
-5. `THÈME` bascule clair / sombre.
+1. Bandeau : choisir RTU ou TCP, puis `CONFIGURATION` (port COM, vitesse,
+   parité, DTR / RTS, timeout, délai inter-trames ; ou hôte, port, PING,
+   connexions réseau Windows). `CONNEXION` ouvre la liaison en maître.
+2. MAÎTRE : esclave, registre (base 0), longueur, type ; `LECTURE` remplit la
+   grille, `ECRITURE` envoie les valeurs modifiées. `Cyclique` + `…` (période).
+3. DIAGNOSTIC : choisir la cible, `LANCER CAMPAGNE` (durée ou nombre) ou
+   `TEST DE TORTURE` ; la liaison s'ouvre toute seule si besoin. `ANALYSER`
+   classe les hypothèses (légende des scores à côté du titre), `LANCER` sur un
+   test exécute une campagne comparée à la référence, `EXPORTER TXT` enregistre
+   le rapport, `AIDE` décrit toutes les hypothèses.
+4. ESPION et SERVEUR ESCLAVE ont leur propre bouton de démarrage : ils prennent
+   le port et grisent les autres onglets jusqu'à l'arrêt.
+5. `THÈME` bascule clair / sombre ; la liste Français / English change la
+   langue (port libre requis).
 
-Architecture et conventions : voir `CLAUDE.md`.
+Architecture et conventions : voir `CLAUDE.md`. Plan et compte rendu de la
+phase 3 : `docs/PHASE3_PLAN.md`, `docs/PHASE3_COMPTE_RENDU.md`.

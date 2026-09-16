@@ -85,7 +85,7 @@ class SlaveConfig:
     limits: dict[Table, int] = field(default_factory=lambda: {t: TABLE_SIZE for t in Table})
     vendor: str = "ModbusAI"
     product: str = "Serveur esclave RTU"
-    revision: str = "0.2.0"
+    revision: str = "0.3.0"
 
 
 @dataclass(slots=True)
