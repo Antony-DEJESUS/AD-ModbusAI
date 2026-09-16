@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QFormLayout,
@@ -16,6 +19,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
+    QRadioButton,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -23,9 +27,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modbusai.analysis.scanner import ScanPlan, ScanResult, ScanStatus
+from modbusai.analysis.scanner import COMMON_BAUDRATES, ScanPlan, ScanResult, ScanStatus
 from modbusai.modbus.records import FunctionCode
-from modbusai.transport.records import LinkSettings
+from modbusai.transport.records import LinkSettings, Parity, SerialSettings
+from modbusai.ui.widgets.config_dialog import BAUDRATES
 
 _STATUS_COLOR = {
     ScanStatus.PRESENT: "#2ea043",
@@ -75,8 +80,62 @@ class ScanPage(QWidget):
         self.retries.setValue(1)
         self.identify = QCheckBox("Identifier les équipements (FC43, FC17)")
         self.identify.setChecked(True)
-        self.sweep = QCheckBox("Balayer vitesses et parités (long)")
         self.show_absent = QCheckBox("Afficher les adresses absentes")
+
+        # ---- liaison utilisée par le scan
+        self.link_current = QRadioButton("Paramètres courants (bandeau)")
+        self.link_custom = QRadioButton("Paramètres personnalisés")
+        self.link_sweep = QRadioButton("Balayer plusieurs paramètres (long)")
+        self.link_current.setChecked(True)
+        link_group = QButtonGroup(self)
+        for r in (self.link_current, self.link_custom, self.link_sweep):
+            link_group.addButton(r)
+        self.custom_baud = QComboBox()
+        for b in BAUDRATES:
+            self.custom_baud.addItem(str(b), b)
+        self.custom_baud.setCurrentIndex(BAUDRATES.index(19200))
+        self.custom_parity = QComboBox()
+        for parity, label in ((Parity.NONE, "None"), (Parity.EVEN, "Even"), (Parity.ODD, "Odd")):
+            self.custom_parity.addItem(label, parity)
+        self.custom_stop = QComboBox()
+        for v, label in ((1.0, "1"), (2.0, "2")):
+            self.custom_stop.addItem(label, v)
+        custom_row = QHBoxLayout()
+        custom_row.setContentsMargins(20, 0, 0, 0)
+        for label, w in (("Vitesse", self.custom_baud), ("Parité", self.custom_parity), ("Stop", self.custom_stop)):
+            custom_row.addWidget(QLabel(label))
+            custom_row.addWidget(w)
+        custom_row.addStretch(1)
+        self.custom_widget = QWidget()
+        self.custom_widget.setLayout(custom_row)
+        self.sweep_bauds = {b: QCheckBox(str(b)) for b in BAUDRATES}
+        for b in COMMON_BAUDRATES:
+            self.sweep_bauds[b].setChecked(True)
+        self.sweep_framings = {
+            (Parity.NONE, 1.0): QCheckBox("8N1"),
+            (Parity.EVEN, 1.0): QCheckBox("8E1"),
+            (Parity.ODD, 1.0): QCheckBox("8O1"),
+            (Parity.NONE, 2.0): QCheckBox("8N2"),
+        }
+        for cb in self.sweep_framings.values():
+            cb.setChecked(True)
+        sweep_layout = QVBoxLayout()
+        sweep_layout.setContentsMargins(20, 0, 0, 0)
+        bauds_row = QHBoxLayout()
+        for cb in self.sweep_bauds.values():
+            bauds_row.addWidget(cb)
+        bauds_row.addStretch(1)
+        fr_row = QHBoxLayout()
+        for cb in self.sweep_framings.values():
+            fr_row.addWidget(cb)
+        fr_row.addStretch(1)
+        sweep_layout.addLayout(bauds_row)
+        sweep_layout.addLayout(fr_row)
+        self.sweep_widget = QWidget()
+        self.sweep_widget.setLayout(sweep_layout)
+        self.link_hint = QLabel("")
+        self.link_hint.setStyleSheet("color: #8b949e;")
+        self.link_hint.setWordWrap(True)
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
@@ -94,10 +153,22 @@ class ScanPage(QWidget):
         form.addRow("Timeout par essai", self.timeout)
         form.addRow("Essais supplémentaires", self.retries)
         form.addRow("", self.identify)
-        form.addRow("", self.sweep)
+        link_layout = QVBoxLayout()
+        link_layout.addWidget(self.link_current)
+        link_layout.addWidget(self.link_custom)
+        link_layout.addWidget(self.custom_widget)
+        link_layout.addWidget(self.link_sweep)
+        link_layout.addWidget(self.sweep_widget)
+        link_layout.addWidget(self.link_hint)
+        self.link_box = QGroupBox("Liaison du scan")
+        self.link_box.setLayout(link_layout)
+        params_layout = QVBoxLayout()
+        params_layout.addLayout(form)
+        params_layout.addWidget(self.link_box)
+        params_layout.addStretch(1)
         params = QGroupBox("Paramètres du scan")
-        params.setLayout(form)
-        params.setMaximumWidth(440)
+        params.setLayout(params_layout)
+        params.setMaximumWidth(470)
 
         self.start_btn = QPushButton("LANCER SCAN")
         self.cancel_btn = QPushButton("ARRÊTER")
@@ -146,6 +217,52 @@ class ScanPage(QWidget):
         self.copy_btn.clicked.connect(self._copy)
         self.show_absent.toggled.connect(lambda _c: self._rebuild())
         self.first.valueChanged.connect(lambda v: self.last.setMinimum(v))
+        for r in (self.link_current, self.link_custom, self.link_sweep):
+            r.toggled.connect(lambda _c: self._update_link_widgets())
+        self._tcp = False
+        self._update_link_widgets()
+
+    # ============================================================== liaison
+    def set_tcp(self, tcp: bool) -> None:
+        """En TCP, il n'y a ni vitesse ni parité : seuls les paramètres courants s'appliquent."""
+        self._tcp = tcp
+        if tcp:
+            self.link_current.setChecked(True)
+        for w in (self.link_custom, self.link_sweep):
+            w.setEnabled(not tcp)
+            w.setToolTip("Sans objet en Modbus TCP" if tcp else "")
+        self._update_link_widgets()
+
+    def _update_link_widgets(self) -> None:
+        self.custom_widget.setEnabled(self.link_custom.isChecked() and not self._tcp)
+        self.sweep_widget.setEnabled(self.link_sweep.isChecked() and not self._tcp)
+        if self.link_sweep.isChecked() and not self._tcp:
+            n = self._selected_bauds_count() * self._selected_framings_count()
+            self.link_hint.setText(f"{n} combinaison(s) : chaque adresse est testée avec chacune, le scan sera long.")
+        elif self.link_custom.isChecked():
+            self.link_hint.setText(
+                "Le port du bandeau est conservé ; vitesse, parité et stop sont remplacés pour la durée du scan."
+            )
+        else:
+            self.link_hint.setText("")
+
+    def _selected_bauds_count(self) -> int:
+        return sum(1 for cb in self.sweep_bauds.values() if cb.isChecked())
+
+    def _selected_framings_count(self) -> int:
+        return sum(1 for cb in self.sweep_framings.values() if cb.isChecked())
+
+    def scan_settings(self, current: LinkSettings) -> LinkSettings:
+        """Paramètres de base du scan selon le choix de liaison."""
+        if self.link_custom.isChecked() and isinstance(current, SerialSettings):
+            return replace(
+                current,
+                baudrate=self.custom_baud.currentData(),
+                parity=self.custom_parity.currentData(),
+                stopbits=self.custom_stop.currentData(),
+                bytesize=8,
+            )
+        return current
 
     # ================================================================ plan
     def plan(self, settings: LinkSettings) -> ScanPlan:
@@ -158,8 +275,10 @@ class ScanPage(QWidget):
             timeout_ms=float(self.timeout.value()),
             retries=self.retries.value(),
             identify=self.identify.isChecked(),
-            sweep_settings=self.sweep.isChecked(),
-            base_settings=settings,
+            sweep_settings=self.link_sweep.isChecked() and not self._tcp,
+            base_settings=self.scan_settings(settings),
+            sweep_baudrates=tuple(b for b, cb in self.sweep_bauds.items() if cb.isChecked()),
+            sweep_framings=tuple(k for k, cb in self.sweep_framings.items() if cb.isChecked()),
         )
 
     def _start(self) -> None:

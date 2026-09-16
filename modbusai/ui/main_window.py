@@ -7,8 +7,6 @@ et lance / arrête les threads espion et esclave à la demande des pages.
 
 from __future__ import annotations
 
-import enum
-
 from PySide6.QtCore import QSettings, QThread, QTimer, Signal
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QMessageBox, QTabWidget, QVBoxLayout, QWidget
@@ -25,19 +23,13 @@ from modbusai.ui.pages.master_page import MasterPage
 from modbusai.ui.pages.scan_page import ScanPage
 from modbusai.ui.pages.slave_page import SlavePage
 from modbusai.ui.pages.sniffer_page import SnifferPage
+from modbusai.ui.roles import Role, Tab, tab_states
 from modbusai.ui.theme import THEMES, apply_theme, system_theme
 from modbusai.ui.widgets.config_dialog import ConfigDialog
 from modbusai.ui.widgets.connection_bar import ConnectionBar
 from modbusai.ui.workers import ExecuteJob, ModbusWorker, SlaveWorker, SnifferWorker, TcpSlaveWorker
 
 RECONNECT_DELAY_MS = 1500
-
-
-class Role(enum.Enum):
-    IDLE = "aucun"
-    MASTER = "maître"
-    SNIFFER = "espion"
-    SLAVE = "esclave"
 
 
 class MainWindow(QMainWindow):
@@ -68,11 +60,15 @@ class MainWindow(QMainWindow):
         self.diagnostic_page = DiagnosticPage(self.session)
         self.slave_page = SlavePage(self.store)
         self.tabs = QTabWidget()
-        self.tabs.addTab(self.master_page, "MAÎTRE")
-        self.tabs.addTab(self.sniffer_page, "ESPION")
-        self.tabs.addTab(self.scan_page, "SCAN RÉSEAU")
-        self.tabs.addTab(self.diagnostic_page, "DIAGNOSTIC")
-        self.tabs.addTab(self.slave_page, "SERVEUR ESCLAVE")
+        self._tab_index: dict[Tab, int] = {}
+        for tab, page in (
+            (Tab.MASTER, self.master_page),
+            (Tab.SNIFFER, self.sniffer_page),
+            (Tab.SCAN, self.scan_page),
+            (Tab.DIAGNOSTIC, self.diagnostic_page),
+            (Tab.SLAVE, self.slave_page),
+        ):
+            self._tab_index[tab] = self.tabs.addTab(page, tab.value)
         self.status_label = QLabel("Status : déconnecté")
 
         central = QWidget()
@@ -465,10 +461,24 @@ class MainWindow(QMainWindow):
         self.slave_page.log_panel.console.log_error(message)
 
     # ========================================================== disponibilité
+    def _busy_tab(self) -> Tab | None:
+        if self.scan_ctl.active:
+            return Tab.SCAN
+        if self.campaign_ctl.active or self.stress_ctl.active:
+            return Tab.DIAGNOSTIC
+        return None
+
     def _update_availability(self) -> None:
-        busy = self.scan_ctl.active or self.campaign_ctl.active or self.stress_ctl.active
+        busy = self._busy_tab() is not None
         master_ok = self._connected and self._role is Role.MASTER and not busy
         port_free = self._role in (Role.IDLE, Role.MASTER) and not busy
+        # Blocages entre onglets : un rôle actif verrouille les autres onglets
+        states = tab_states(self._role, self._connected, self._busy_tab())
+        for tab, idx in self._tab_index.items():
+            st = states[tab]
+            self.tabs.setTabEnabled(idx, st.enabled)
+            self.tabs.setTabToolTip(idx, st.reason)
+        self.scan_page.set_tcp(self._is_tcp)
         self.sniffer_page.set_available(
             port_free and not self._is_tcp, "Écoute passive disponible en RTU uniquement" if self._is_tcp else ""
         )

@@ -33,8 +33,10 @@ class ScanPlan:
     timeout_ms: float = 200.0
     retries: int = 1  # essais supplémentaires avant de déclarer absent
     identify: bool = True  # FC43 puis FC17 sur les esclaves présents
-    sweep_settings: bool = False  # balayer vitesses / parités courantes (série uniquement)
+    sweep_settings: bool = False  # balayer vitesses / parités (série uniquement)
     base_settings: LinkSettings | None = None
+    sweep_baudrates: tuple[int, ...] = COMMON_BAUDRATES  # vitesses à balayer si sweep_settings
+    sweep_framings: tuple[tuple[Parity, float], ...] = COMMON_FRAMINGS  # (parité, stop) à balayer
 
     @property
     def slaves(self) -> range:
@@ -52,8 +54,8 @@ class ScanPlan:
         if not self.sweep_settings or not isinstance(base, SerialSettings):
             return [base]
         variants = [base]
-        for baud in COMMON_BAUDRATES:
-            for parity, stop in COMMON_FRAMINGS:
+        for baud in self.sweep_baudrates:
+            for parity, stop in self.sweep_framings:
                 v = replace(base, baudrate=baud, parity=parity, stopbits=stop, bytesize=8)
                 if v not in variants:
                     variants.append(v)
