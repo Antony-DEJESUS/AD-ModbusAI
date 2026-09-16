@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, replace
 
 from modbusai.analysis.identification import DeviceIdentity
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus, FunctionCode, Request
-from modbusai.transport.records import Parity, SerialSettings
+from modbusai.transport.records import LinkSettings, Parity, SerialSettings
 
 COMMON_BAUDRATES = (9600, 19200, 38400, 115200, 4800)
 COMMON_FRAMINGS = ((Parity.NONE, 1.0), (Parity.EVEN, 1.0), (Parity.NONE, 2.0), (Parity.ODD, 1.0))
@@ -33,8 +33,8 @@ class ScanPlan:
     timeout_ms: float = 200.0
     retries: int = 1  # essais supplémentaires avant de déclarer absent
     identify: bool = True  # FC43 puis FC17 sur les esclaves présents
-    sweep_settings: bool = False  # balayer vitesses / parités courantes
-    base_settings: SerialSettings | None = None
+    sweep_settings: bool = False  # balayer vitesses / parités courantes (série uniquement)
+    base_settings: LinkSettings | None = None
 
     @property
     def slaves(self) -> range:
@@ -43,12 +43,13 @@ class ScanPlan:
     def probe_request(self, slave_id: int) -> Request:
         return Request(slave_id, self.function, self.address, self.count)
 
-    def settings_variants(self) -> list[SerialSettings]:
-        """Jeux de paramètres à essayer : le courant, puis les combinaisons usuelles."""
+    def settings_variants(self) -> list[LinkSettings]:
+        """Jeux de paramètres à essayer : le courant, puis les combinaisons usuelles
+        (série uniquement : en TCP il n'y a ni vitesse ni parité)."""
         base = self.base_settings
         if base is None:
             return []
-        if not self.sweep_settings:
+        if not self.sweep_settings or not isinstance(base, SerialSettings):
             return [base]
         variants = [base]
         for baud in COMMON_BAUDRATES:
@@ -66,7 +67,7 @@ class ScanPlan:
 @dataclass(slots=True)
 class ScanResult:
     slave_id: int
-    settings: SerialSettings
+    settings: LinkSettings
     status: ScanStatus
     response_time_ms: float | None = None
     detail: str = ""

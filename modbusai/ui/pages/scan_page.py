@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 
 from modbusai.analysis.scanner import ScanPlan, ScanResult, ScanStatus
 from modbusai.modbus.records import FunctionCode
-from modbusai.transport.records import SerialSettings
+from modbusai.transport.records import LinkSettings
 
 _STATUS_COLOR = {
     ScanStatus.PRESENT: "#2ea043",
@@ -148,7 +148,7 @@ class ScanPage(QWidget):
         self.first.valueChanged.connect(lambda v: self.last.setMinimum(v))
 
     # ================================================================ plan
-    def plan(self, settings: SerialSettings) -> ScanPlan:
+    def plan(self, settings: LinkSettings) -> ScanPlan:
         return ScanPlan(
             first_slave=self.first.value(),
             last_slave=self.last.value(),
@@ -234,7 +234,7 @@ class ScanPage(QWidget):
         noisy = [r for r in self._results if r.status in (ScanStatus.NOISY, ScanStatus.CONFLICT)]
         text = f"{len(present)} équipement(s) trouvé(s)"
         if present:
-            text += " : " + ", ".join(f"esclave {r.slave_id} ({r.settings.baudrate})" for r in present[:12])
+            text += " : " + ", ".join(f"esclave {r.slave_id} ({r.settings.summary()})" for r in present[:12])
             if len(present) > 12:
                 text += "…"
         if noisy:

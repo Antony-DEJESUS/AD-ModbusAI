@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from modbusai.analysis.observations import Observation, SlaveStats, compute_stats
 from modbusai.analysis.sniffer import Transaction
 from modbusai.modbus.records import ExchangeRecord
-from modbusai.transport.records import SerialSettings
+from modbusai.transport.records import LinkSettings
 
 
 class SessionStore:
@@ -22,7 +22,7 @@ class SessionStore:
         self._observations.append(obs)
         return obs
 
-    def add_transaction(self, tr: Transaction, settings: SerialSettings | None) -> Observation:
+    def add_transaction(self, tr: Transaction, settings: LinkSettings | None) -> Observation:
         resp = tr.response
         obs = Observation(
             timestamp=tr.timestamp,

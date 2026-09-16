@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 
 from modbusai.modbus.codec import Radix, format_int, parse_int
 from modbusai.modbus.slave import TABLE_SIZE, DataStore, HandledRequest, SlaveConfig, Table
-from modbusai.transport.records import SerialSettings
+from modbusai.transport.records import LinkSettings
 from modbusai.ui.widgets.log_console import LogPanel
 
 COLUMNS = 10
@@ -346,7 +346,7 @@ class SlavePage(QWidget):
             return
         self.start_requested.emit(cfg)
 
-    def on_started(self, settings: SerialSettings) -> None:
+    def on_started(self, settings: LinkSettings) -> None:
         self._serving = True
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)

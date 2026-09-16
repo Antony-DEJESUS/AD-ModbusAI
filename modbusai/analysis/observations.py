@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus
-from modbusai.transport.records import SerialSettings
+from modbusai.transport.records import LinkSettings
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +28,7 @@ class Observation:
     rx_chunks: int = 0  # nombre de blocs USB ayant composé la réponse
     rx_length: int = 0
     tx_to_rx_echo: bool = False  # la réponse est l'écho exact de la requête (adaptateur)
-    settings: SerialSettings | None = None
+    settings: LinkSettings | None = None
 
     @classmethod
     def from_record(cls, rec: ExchangeRecord, source: str = "maitre") -> Observation:

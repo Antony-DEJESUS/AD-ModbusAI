@@ -15,7 +15,7 @@ from modbusai.analysis.observations import Observation, SlaveStats, compute_stat
 from modbusai.analysis.scanner import ScanPlan, ScanResult, ScanStatus, identification_requests, merge_attempts
 from modbusai.analysis.session import SessionStore
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus, FunctionCode, Request
-from modbusai.transport.records import SerialSettings
+from modbusai.transport.records import LinkSettings
 from modbusai.ui.workers import ExecuteJob
 
 
@@ -23,7 +23,7 @@ class ScanController(QObject):
     """Parcourt variantes de liaison × adresses ; identifie les présents."""
 
     execute_requested = Signal(object)  # ExecuteJob
-    reopen_requested = Signal(object)  # SerialSettings
+    reopen_requested = Signal(object)  # LinkSettings
     progress = Signal(int, int, str)  # fait, total, libellé
     result_ready = Signal(object)  # ScanResult
     finished = Signal(bool)  # True si terminé normalement, False si annulé / erreur
@@ -33,7 +33,7 @@ class ScanController(QObject):
         super().__init__(parent)
         self.session = session
         self._plan: ScanPlan | None = None
-        self._variants: list[SerialSettings] = []
+        self._variants: list[LinkSettings] = []
         self._variant_idx = 0
         self._slave_idx = 0
         self._attempts: list[ExchangeRecord] = []
@@ -69,7 +69,7 @@ class ScanController(QObject):
         self._restore_and_finish(False)
 
     # ------------------------------------------------------------ retours
-    def on_connected(self, settings: SerialSettings) -> None:
+    def on_connected(self, settings: LinkSettings) -> None:
         if not self._active or not self._waiting_reopen:
             return
         self._waiting_reopen = False
@@ -213,7 +213,7 @@ class CampaignController(QObject):
         self._test: SuggestedTest | None = None
         self._baseline: SlaveStats | None = None
         self._request: Request | None = None
-        self._base_settings: SerialSettings | None = None
+        self._base_settings: LinkSettings | None = None
         self._records: list[ExchangeRecord] = []
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
@@ -225,7 +225,7 @@ class CampaignController(QObject):
     def active(self) -> bool:
         return self._active
 
-    def start(self, test: SuggestedTest, baseline: SlaveStats, request: Request, base_settings: SerialSettings) -> None:
+    def start(self, test: SuggestedTest, baseline: SlaveStats, request: Request, base_settings: LinkSettings) -> None:
         self._test, self._baseline, self._request, self._base_settings = test, baseline, request, base_settings
         self._records = []
         self._active = True
@@ -242,7 +242,7 @@ class CampaignController(QObject):
             self._timer.stop()
             self._finish(None)
 
-    def on_connected(self, settings: SerialSettings) -> None:
+    def on_connected(self, settings: LinkSettings) -> None:
         if self._restoring:
             self._restoring = False
             return

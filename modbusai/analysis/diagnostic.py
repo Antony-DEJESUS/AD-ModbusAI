@@ -14,7 +14,7 @@ from dataclasses import dataclass, field, replace
 
 from modbusai.analysis.observations import Observation, SlaveStats
 from modbusai.modbus.exceptions import exception_label
-from modbusai.transport.records import Parity, SerialSettings
+from modbusai.transport.records import LinkSettings, Parity, SerialSettings
 
 MIN_SAMPLES = 5  # en dessous, on ne conclut pas
 
@@ -33,11 +33,13 @@ class SuggestedTest:
     stopbits: float | None = None
     inter_frame_delay_ms: float | None = None
 
-    def apply(self, settings: SerialSettings) -> SerialSettings:
-        """Paramètres de liaison pour la campagne."""
+    def apply(self, settings: LinkSettings) -> LinkSettings:
+        """Paramètres de liaison pour la campagne. En TCP seul le timeout s'applique."""
         changes: dict = {}
         if self.timeout_ms is not None:
             changes["response_timeout_ms"] = self.timeout_ms
+        if not isinstance(settings, SerialSettings):
+            return replace(settings, **changes) if changes else settings
         if self.baudrate is not None:
             changes["baudrate"] = self.baudrate
         if self.parity is not None:
@@ -158,7 +160,7 @@ def _rule_framing(st: SlaveStats) -> Hypothesis | None:
     )
 
 
-def _rule_line_quality(st: SlaveStats, settings: SerialSettings | None) -> Hypothesis | None:
+def _rule_line_quality(st: SlaveStats, settings: LinkSettings | None) -> Hypothesis | None:
     if st.total < MIN_SAMPLES * 2 or st.ok == 0:
         return None
     intermittent = (st.crc_error + st.bad_response + st.timeout) / st.total
@@ -176,7 +178,7 @@ def _rule_line_quality(st: SlaveStats, settings: SerialSettings | None) -> Hypot
             "120 Ω aux deux extrémités seulement, pas de dérivation longue, blindage relié d'un seul côté.",
         ),
     ]
-    if settings is not None and settings.baudrate > 9600:
+    if isinstance(settings, SerialSettings) and settings.baudrate > 9600:
         tests.append(
             SuggestedTest(
                 "slow_baud",
@@ -210,7 +212,7 @@ def _rule_line_quality(st: SlaveStats, settings: SerialSettings | None) -> Hypot
     )
 
 
-def _rule_slow_slave(st: SlaveStats, settings: SerialSettings | None) -> Hypothesis | None:
+def _rule_slow_slave(st: SlaveStats, settings: LinkSettings | None) -> Hypothesis | None:
     if st.total < MIN_SAMPLES or st.timeout == 0 or not st.response_times or settings is None:
         return None
     p95 = st.rt_p95 or 0.0
@@ -322,10 +324,10 @@ def _rule_exceptions(st: SlaveStats) -> Hypothesis | None:
 
 
 def _rule_fragmentation(
-    st: SlaveStats, observations: list[Observation], settings: SerialSettings | None
+    st: SlaveStats, observations: list[Observation], settings: LinkSettings | None
 ) -> Hypothesis | None:
-    if st.total < MIN_SAMPLES or settings is None:
-        return None
+    if st.total < MIN_SAMPLES or not isinstance(settings, SerialSettings):
+        return None  # la fragmentation USB n'a pas d'équivalent en TCP
     truncated = [
         o
         for o in observations
@@ -411,7 +413,7 @@ def _rule_healthy(stats: dict[int, SlaveStats]) -> Hypothesis | None:
 
 
 def analyse(
-    stats: dict[int, SlaveStats], observations: Iterable[Observation], settings: SerialSettings | None
+    stats: dict[int, SlaveStats], observations: Iterable[Observation], settings: LinkSettings | None
 ) -> list[Hypothesis]:
     obs = list(observations)
     hyps: list[Hypothesis] = []

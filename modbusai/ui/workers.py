@@ -17,11 +17,21 @@ from dataclasses import dataclass
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from modbusai.analysis.sniffer import PassiveDecoder
-from modbusai.modbus.master import RtuMaster
+from modbusai.modbus.master import ModbusMaster
 from modbusai.modbus.records import Request
 from modbusai.modbus.slave import DataStore, SlaveConfig, SlaveHandler
-from modbusai.transport.records import SerialSettings, TransportError
+from modbusai.modbus.tcp_slave import make_tcp_frame_handler
+from modbusai.transport.records import LinkSettings, SerialSettings, TcpSettings, TransportError
 from modbusai.transport.serial_link import SerialLink
+from modbusai.transport.tcp_link import TcpLink
+from modbusai.transport.tcp_server import TcpServer
+
+
+def open_link_for(settings: LinkSettings, *, allow_tx: bool = True) -> SerialLink | TcpLink:
+    """Choisit la liaison selon le type de paramètres."""
+    if isinstance(settings, TcpSettings):
+        return TcpLink(settings, allow_tx=allow_tx)
+    return SerialLink(settings, allow_tx=allow_tx)
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,7 +43,7 @@ class ExecuteJob:
 
 # ================================================================== maître
 class ModbusWorker(QObject):
-    connected = Signal(object)  # SerialSettings effectivement ouverts
+    connected = Signal(object)  # LinkSettings effectivement ouverts
     disconnected = Signal()
     link_error = Signal(str)  # ouverture impossible
     record_ready = Signal(object, object)  # ExchangeRecord, ExecuteJob
@@ -41,8 +51,8 @@ class ModbusWorker(QObject):
 
     def __init__(self) -> None:
         super().__init__()
-        self._link: SerialLink | None = None
-        self._master: RtuMaster | None = None
+        self._link: SerialLink | TcpLink | None = None
+        self._master: ModbusMaster | None = None
         self._seq = 0  # numérotation des échanges, conservée d'une connexion à l'autre
 
     @property
@@ -50,16 +60,16 @@ class ModbusWorker(QObject):
         return self._link is not None and self._link.is_open
 
     @Slot(object)
-    def open_link(self, settings: SerialSettings) -> None:
+    def open_link(self, settings: LinkSettings) -> None:
         self._close_quietly()
-        link = SerialLink(settings, allow_tx=True)
+        link = open_link_for(settings, allow_tx=True)
         try:
             link.open()
         except TransportError as exc:
             self.link_error.emit(str(exc))
             return
         self._link = link
-        self._master = RtuMaster(link, seq_start=self._seq)
+        self._master = ModbusMaster(link, seq_start=self._seq)
         self.connected.emit(settings)
 
     @Slot()
@@ -188,4 +198,58 @@ class SlaveWorker(QThread):
             self.link_error.emit(str(exc))
         finally:
             link.close()
+            self.stopped.emit()
+
+
+class TcpSlaveWorker(QThread):
+    """Serveur esclave Modbus TCP : écoute sur un port, sert plusieurs clients."""
+
+    started_serving = Signal(object)  # TcpSettings (hôte d'écoute, port)
+    stopped = Signal()
+    link_error = Signal(str)
+    handled = Signal(object)  # HandledRequest
+    store_changed = Signal()
+
+    def __init__(
+        self, settings: TcpSettings, store: DataStore, config: SlaveConfig, parent: QObject | None = None
+    ) -> None:
+        super().__init__(parent)
+        self.settings = settings
+        self.handler = SlaveHandler(store, config)
+        self._stop = threading.Event()
+        self.server: TcpServer | None = None
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def run(self) -> None:
+        store = self.handler.store
+        version = [store.version]
+
+        def on_handled(result, _client: str) -> None:
+            self.handled.emit(result)
+            if store.version != version[0]:
+                version[0] = store.version
+                self.store_changed.emit()
+
+        host = self.settings.host or "0.0.0.0"
+        server = TcpServer(
+            host,
+            self.settings.port,
+            make_tcp_frame_handler(self.handler, on_handled),
+            response_delay_ms=self.handler.config.response_delay_ms,
+        )
+        try:
+            server.open()
+        except TransportError as exc:
+            self.link_error.emit(str(exc))
+            return
+        self.server = server
+        self.started_serving.emit(TcpSettings(host, server.bound_port))
+        try:
+            server.serve(self._stop)
+        except TransportError as exc:
+            self.link_error.emit(str(exc))
+        finally:
+            server.close()
             self.stopped.emit()

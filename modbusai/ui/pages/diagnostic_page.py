@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 from modbusai.analysis.diagnostic import CampaignComparison, Hypothesis, SuggestedTest, analyse
 from modbusai.analysis.observations import SlaveStats
 from modbusai.analysis.session import SessionStore
-from modbusai.transport.records import SerialSettings
+from modbusai.transport.records import LinkSettings
 
 # Par défaut, le scan est exclu : ses adresses absentes ne sont pas des pannes à expliquer.
 SOURCES = (
@@ -54,7 +54,7 @@ class DiagnosticPage(QWidget):
     def __init__(self, session: SessionStore, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.session = session
-        self._settings: SerialSettings | None = None
+        self._settings: LinkSettings | None = None
         self._hypotheses: list[Hypothesis] = []
         self._stats: dict[int, SlaveStats] = {}
         self._test_running = False
@@ -148,7 +148,7 @@ class DiagnosticPage(QWidget):
         self.cancel_test_btn.clicked.connect(self.cancel_test_requested)
 
     # ================================================================ état
-    def set_settings(self, settings: SerialSettings | None) -> None:
+    def set_settings(self, settings: LinkSettings | None) -> None:
         self._settings = settings
 
     def set_can_run_tests(self, can_run: bool) -> None:

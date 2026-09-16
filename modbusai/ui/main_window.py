@@ -18,7 +18,7 @@ from modbusai.analysis.diagnostic import Hypothesis, SuggestedTest
 from modbusai.analysis.session import SessionStore
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus
 from modbusai.modbus.slave import DataStore, SlaveConfig
-from modbusai.transport.records import Parity, SerialSettings
+from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
 from modbusai.ui.controllers import CampaignController, ScanController, probe_request_for
 from modbusai.ui.pages.diagnostic_page import DiagnosticPage
 from modbusai.ui.pages.master_page import MasterPage
@@ -28,7 +28,7 @@ from modbusai.ui.pages.sniffer_page import SnifferPage
 from modbusai.ui.theme import THEMES, apply_theme, system_theme
 from modbusai.ui.widgets.config_dialog import ConfigDialog
 from modbusai.ui.widgets.connection_bar import ConnectionBar
-from modbusai.ui.workers import ExecuteJob, ModbusWorker, SlaveWorker, SnifferWorker
+from modbusai.ui.workers import ExecuteJob, ModbusWorker, SlaveWorker, SnifferWorker, TcpSlaveWorker
 
 RECONNECT_DELAY_MS = 1500
 
@@ -50,7 +50,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(APP_TITLE)
         self.resize(1180, 760)
 
-        self._settings = self._load_settings()
+        self._serial_settings, self._tcp_settings, self._protocol = self._load_settings()
         self._role = Role.IDLE
         self._connected = False
         self._manual_disconnect = False
@@ -114,6 +114,7 @@ class MainWindow(QMainWindow):
         self.connection_bar.disconnect_requested.connect(self._disconnect)
         self.connection_bar.quit_requested.connect(self.close)
         self.connection_bar.theme_toggled.connect(self._toggle_theme)
+        self.connection_bar.protocol_changed.connect(self._on_protocol_changed)
 
         self.master_page.execute_requested.connect(self._cmd_execute)
         self.master_page.status_message.connect(self._set_status)
@@ -142,9 +143,27 @@ class MainWindow(QMainWindow):
 
         self.tabs.currentChanged.connect(lambda _i: self._update_availability())
 
+        self.connection_bar.set_protocol(self._protocol)
         self.connection_bar.show_settings(self._settings)
         self.diagnostic_page.set_settings(self._settings)
         self._apply_saved_theme()
+        self._update_availability()
+
+    @property
+    def _settings(self) -> LinkSettings:
+        return self._tcp_settings if self._protocol == "TCP" else self._serial_settings
+
+    @property
+    def _is_tcp(self) -> bool:
+        return self._protocol == "TCP"
+
+    def _on_protocol_changed(self, name: str) -> None:
+        if name not in ("RTU", "TCP") or name == self._protocol:
+            return
+        self._protocol = name
+        self.connection_bar.show_settings(self._settings)
+        self.diagnostic_page.set_settings(self._settings)
+        self._save_settings()
         self._update_availability()
 
     # ================================================================ thème
@@ -163,23 +182,32 @@ class MainWindow(QMainWindow):
 
     # ============================================================== liaison
     def _configure(self) -> None:
-        dlg = ConfigDialog(self._settings, self)
+        dlg = ConfigDialog(self._protocol, self._serial_settings, self._tcp_settings, self)
         if dlg.exec():
-            self._settings = dlg.settings()
+            self._serial_settings = dlg.serial_settings()
+            self._tcp_settings = dlg.tcp_settings()
             self.connection_bar.show_settings(self._settings)
             self.diagnostic_page.set_settings(self._settings)
             self._save_settings()
 
     def _connect(self) -> None:
-        if not self._settings.port:
-            QMessageBox.warning(self, APP_TITLE, "Choisissez un port dans CONFIGURATION.")
+        if not self._target_defined():
             return
         if self._role in (Role.SNIFFER, Role.SLAVE):
             self._set_status("Arrêtez d'abord l'espion ou le serveur esclave : le port est occupé.")
             return
         self._manual_disconnect = False
-        self._set_status(f"Ouverture de {self._settings.port}…")
+        self._set_status(f"Ouverture de {self._settings.summary()}…")
         self._cmd_open.emit(self._settings)
+
+    def _target_defined(self) -> bool:
+        if self._is_tcp and not self._tcp_settings.host:
+            QMessageBox.warning(self, APP_TITLE, "Renseignez l'hôte dans CONFIGURATION.")
+            return False
+        if not self._is_tcp and not self._serial_settings.port:
+            QMessageBox.warning(self, APP_TITLE, "Choisissez un port dans CONFIGURATION.")
+            return False
+        return True
 
     def _disconnect(self) -> None:
         self._manual_disconnect = True
@@ -197,10 +225,10 @@ class MainWindow(QMainWindow):
         self._reconnect_pending = False
         self.connection_bar.set_connected(True)
         self.connection_bar.show_settings(settings)
-        self._set_status(
-            f"Connecté : {settings.summary()} (timeout {settings.response_timeout_ms:g} ms, "
-            f"silence fin de trame {settings.frame_gap_ms:.2f} ms)"
-        )
+        detail = f"timeout {settings.response_timeout_ms:g} ms"
+        if isinstance(settings, SerialSettings):
+            detail += f", silence fin de trame {settings.frame_gap_ms:.2f} ms"
+        self._set_status(f"Connecté : {settings.summary()} ({detail})")
         self.master_page.on_connected(settings.summary())
         self._update_availability()
 
@@ -305,8 +333,10 @@ class MainWindow(QMainWindow):
 
     # =============================================================== espion
     def _start_sniffer(self) -> None:
-        if not self._settings.port:
-            QMessageBox.warning(self, APP_TITLE, "Choisissez un port dans CONFIGURATION.")
+        if self._is_tcp:
+            self._set_status("Le mode espion n'existe qu'en RTU : passez le protocole sur RTU.")
+            return
+        if not self._target_defined():
             return
         if self._role is Role.SLAVE:
             self._set_status("Arrêtez le serveur esclave avant de lancer l'écoute.")
@@ -315,7 +345,7 @@ class MainWindow(QMainWindow):
             self._manual_disconnect = True
             self._cmd_close.emit()
         self._role = Role.SNIFFER
-        self._sniffer = SnifferWorker(self._settings, self)
+        self._sniffer = SnifferWorker(self._serial_settings, self)
         s = self._sniffer
         s.started_listening.connect(self.sniffer_page.on_started)
         s.link_error.connect(self._on_passive_error)
@@ -349,8 +379,7 @@ class MainWindow(QMainWindow):
 
     # ============================================================== esclave
     def _start_slave(self, config: SlaveConfig) -> None:
-        if not self._settings.port:
-            QMessageBox.warning(self, APP_TITLE, "Choisissez un port dans CONFIGURATION.")
+        if not self._is_tcp and not self._target_defined():
             return
         if self._role is Role.SNIFFER:
             self._set_status("Arrêtez l'écoute avant de lancer le serveur esclave.")
@@ -359,7 +388,12 @@ class MainWindow(QMainWindow):
             self._manual_disconnect = True
             self._cmd_close.emit()
         self._role = Role.SLAVE
-        self._slave = SlaveWorker(self._settings, self.store, config, self)
+        if self._is_tcp:
+            # En serveur, l'hôte configuré est l'adresse d'écoute ; vide = toutes les interfaces
+            listen = TcpSettings("", self._tcp_settings.port)
+            self._slave = TcpSlaveWorker(listen, self.store, config, self)
+        else:
+            self._slave = SlaveWorker(self._serial_settings, self.store, config, self)
         w = self._slave
         w.started_serving.connect(self.slave_page.on_started)
         w.link_error.connect(self._on_slave_error)
@@ -391,7 +425,9 @@ class MainWindow(QMainWindow):
         busy = self.scan_ctl.active or self.campaign_ctl.active
         master_ok = self._connected and self._role is Role.MASTER and not busy
         port_free = self._role in (Role.IDLE, Role.MASTER) and not busy
-        self.sniffer_page.set_available(port_free)
+        self.sniffer_page.set_available(
+            port_free and not self._is_tcp, "Écoute passive disponible en RTU uniquement" if self._is_tcp else ""
+        )
         self.slave_page.set_available(port_free)
         self.scan_page.set_available(master_ok)
         self.diagnostic_page.set_can_run_tests(master_ok)
@@ -402,10 +438,10 @@ class MainWindow(QMainWindow):
     def _set_status(self, text: str) -> None:
         self.status_label.setText(text if text.startswith("Status") else f"Status : {text}")
 
-    def _load_settings(self) -> SerialSettings:
+    def _load_settings(self) -> tuple[SerialSettings, TcpSettings, str]:
         qs = QSettings()
         inter = qs.value("serial/inter_frame_delay_ms", None)
-        return SerialSettings(
+        serial = SerialSettings(
             port=str(qs.value("serial/port", "")),
             baudrate=int(qs.value("serial/baudrate", 19200)),
             bytesize=int(qs.value("serial/bytesize", 8)),
@@ -416,10 +452,20 @@ class MainWindow(QMainWindow):
             rts_toggle=str(qs.value("serial/rts", "false")).lower() == "true",
             dtr=str(qs.value("serial/dtr", "false")).lower() == "true",
         )
+        tcp = TcpSettings(
+            host=str(qs.value("tcp/host", "")),
+            port=int(qs.value("tcp/port", 502)),
+            response_timeout_ms=float(qs.value("tcp/timeout_ms", 1000.0)),
+            connect_timeout_ms=float(qs.value("tcp/connect_timeout_ms", 3000.0)),
+        )
+        protocol = str(qs.value("link/protocol", "RTU"))
+        return serial, tcp, protocol if protocol in ("RTU", "TCP") else "RTU"
 
     def _save_settings(self) -> None:
-        s = self._settings
+        s = self._serial_settings
+        t = self._tcp_settings
         qs = QSettings()
+        qs.setValue("link/protocol", self._protocol)
         qs.setValue("serial/port", s.port)
         qs.setValue("serial/baudrate", s.baudrate)
         qs.setValue("serial/bytesize", s.bytesize)
@@ -429,6 +475,10 @@ class MainWindow(QMainWindow):
         qs.setValue("serial/inter_frame_delay_ms", "" if s.inter_frame_delay_ms is None else s.inter_frame_delay_ms)
         qs.setValue("serial/rts", "true" if s.rts_toggle else "false")
         qs.setValue("serial/dtr", "true" if s.dtr else "false")
+        qs.setValue("tcp/host", t.host)
+        qs.setValue("tcp/port", t.port)
+        qs.setValue("tcp/timeout_ms", t.response_timeout_ms)
+        qs.setValue("tcp/connect_timeout_ms", t.connect_timeout_ms)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self.scan_ctl.cancel()

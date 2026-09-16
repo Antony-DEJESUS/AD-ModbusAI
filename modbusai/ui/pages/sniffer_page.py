@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 from modbusai.analysis.session import SessionStore
 from modbusai.analysis.sniffer import BusCounters, FrameKind, SniffedFrame, Transaction, function_name
 from modbusai.modbus.records import ExchangeStatus
-from modbusai.transport.records import SerialSettings
+from modbusai.transport.records import LinkSettings
 
 MAX_ROWS = 3000
 _STATUS_COLOR = {
@@ -143,7 +143,7 @@ class SnifferPage(QWidget):
     def listening(self) -> bool:
         return self._listening
 
-    def on_started(self, settings: SerialSettings) -> None:
+    def on_started(self, settings: LinkSettings) -> None:
         self._listening = True
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
@@ -156,9 +156,10 @@ class SnifferPage(QWidget):
         self.stop_btn.setEnabled(False)
         self.counters_label.setText(self.counters_label.text().replace("Écoute sur", "Écoute arrêtée -"))
 
-    def set_available(self, available: bool) -> None:
-        """Faux quand le maître ou le serveur esclave occupe le port."""
+    def set_available(self, available: bool, reason: str = "") -> None:
+        """Faux quand le maître ou le serveur esclave occupe le port, ou en TCP."""
         self.start_btn.setEnabled(available and not self._listening)
+        self.start_btn.setToolTip(reason)
 
     # ============================================================== données
     def on_frames(self, frames: list[SniffedFrame], counters: BusCounters) -> None:
