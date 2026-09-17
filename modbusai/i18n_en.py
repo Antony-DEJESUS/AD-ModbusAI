@@ -676,4 +676,9 @@ EN: dict[str, str] = {
     "Écoute : {p0}": "Listening: {p0}",
     "Toutes les sources (scan et torture inclus)": "All sources (scan and torture included)",
     "Torture et tests à liaison dégradée": "Torture and degraded-link tests",
+    "DIAGNOSTIC MODBUS": "MODBUS DIAGNOSTICS",
+    "Incohér.": "Inconsist.",
+    "{p0} ms": "{p0} ms",
+    "Période : {p0} ms": "Period: {p0} ms",
+    "ACTUALISER": "REFRESH",
 }

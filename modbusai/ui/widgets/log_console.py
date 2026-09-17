@@ -6,18 +6,20 @@ from html import escape
 
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QFont, QFontDatabase
-from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
 
 from modbusai.i18n import tr
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus
+from modbusai.ui.palette import State, color
+from modbusai.ui.widgets.labels import section
 
 _STATUS_STYLE = {
-    ExchangeStatus.OK: ("OK", "#2ea043"),
-    ExchangeStatus.TIMEOUT: ("TIMEOUT", "#d29922"),
-    ExchangeStatus.CRC_ERROR: ("ERREUR CRC", "#e5534b"),
-    ExchangeStatus.MODBUS_EXCEPTION: ("EXCEPTION", "#e5534b"),
-    ExchangeStatus.BAD_RESPONSE: ("REPONSE INCOHERENTE", "#e5534b"),
-    ExchangeStatus.TRANSPORT_ERROR: ("ERREUR LIAISON", "#a371f7"),
+    ExchangeStatus.OK: ("OK", State.OK),
+    ExchangeStatus.TIMEOUT: ("TIMEOUT", State.WARN),
+    ExchangeStatus.CRC_ERROR: ("ERREUR CRC", State.ERROR),
+    ExchangeStatus.MODBUS_EXCEPTION: ("EXCEPTION", State.ERROR),
+    ExchangeStatus.BAD_RESPONSE: ("REPONSE INCOHERENTE", State.ERROR),
+    ExchangeStatus.TRANSPORT_ERROR: ("ERREUR LIAISON", State.SPECIAL),
 }
 
 
@@ -33,23 +35,23 @@ class LogConsole(QPlainTextEdit):
         self.setPlaceholderText(tr("Console : horodatage, trame émise, trame reçue, temps de réponse, erreur"))
 
     def log_record(self, rec: ExchangeRecord) -> None:
-        label, color = _STATUS_STYLE[rec.status]
-        label = tr(label)
+        label, state = _STATUS_STYLE[rec.status]
+        label, tint = tr(label), color(state)
         ts = rec.timestamp.strftime("%H:%M:%S.%f")[:-3]
         rx = rec.rx_frame.hex if rec.rx_frame is not None else "-"
         ms = f"{rec.response_time_ms:7.1f} ms" if rec.response_time_ms is not None else "      -    "
         head = f"{ts}  #{rec.seq:<5d} Esc {rec.slave_id:<3d} FC{int(rec.function):02d}"
         line = f"{escape(head)}  TX {escape(rec.tx_frame.hex)}  RX {escape(rx)}  {ms}  "
-        tail = f'<span style="color:{color};font-weight:bold">{label}</span>'
+        tail = f'<span style="color:{tint};font-weight:700">{label}</span>'
         if rec.error_message:
-            tail += f'  <span style="color:{color}">{escape(rec.error_message)}</span>'
+            tail += f'  <span style="color:{tint}">{escape(rec.error_message)}</span>'
         self.appendHtml(f'<span style="white-space:pre">{line}</span>{tail}')
 
     def log_info(self, text: str) -> None:
-        self.appendHtml(f'<span style="color:#8b949e">{escape(text)}</span>')
+        self.appendHtml(f'<span style="color:{color(State.MUTED)}">{escape(text)}</span>')
 
     def log_error(self, text: str) -> None:
-        self.appendHtml(f'<span style="color:#e5534b">{escape(text)}</span>')
+        self.appendHtml(f'<span style="color:{color(State.ERROR)}">{escape(text)}</span>')
 
 
 class LogPanel(QWidget):
@@ -67,7 +69,7 @@ class LogPanel(QWidget):
 
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
-        header.addWidget(QLabel(tr("Journal")))
+        header.addWidget(section(tr("Journal")))
         header.addStretch(1)
         header.addWidget(self.copy_btn)
         header.addWidget(self.clear_btn)

@@ -49,8 +49,11 @@ modbusai/ui/                   couche 3 : Qt uniquement
     roles.py                   Role, Tab, tab_states() : table pure des blocages entre onglets
     workers.py                 ModbusWorker (maître RTU/TCP), SnifferWorker, SlaveWorker, TcpSlaveWorker
     controllers.py             ScanController, CampaignController (durée), StressController (phases)
-    theme.py / style.py        palettes clair / sombre + feuille de style basée sur palette()
-    icons.py                   chevrons des listes déroulantes / compteurs, dessinés dans la couleur du thème
+    palette.py                 charte AD : jetons de couleur des deux thèmes, couleurs d'état (State)
+    theme.py                   palette Qt construite depuis la charte, application du thème
+    style.py                   feuille de style engendrée depuis les jetons (cartes, onglets, accent)
+    icons.py                   chevrons et coche dessinés à l'exécution dans la couleur du thème
+    widgets/labels.py          section() et muted() : étiquettes typées par la feuille de style
     resources.py               logo, icône, CHANGELOG (compatible PyInstaller)
     network_tools.py           ping système dans un thread, ouverture de ncpa.cpl (Windows)
     pages/                     master_page, sniffer_page, scan_page, diagnostic_page, slave_page
@@ -135,6 +138,10 @@ docs/                          propositions, plan et compte rendu de phase
   `phase_reading` en clair) et enfin la trace de toutes les trames. Le fichier
   doit se suffire à lui-même : il est relu sans l'application, éventuellement
   par un assistant.
+- **Charte graphique** : `ui/palette.py` décrit les deux thèmes par des jetons
+  (fond, surfaces, cartes, bordures, texte, accent, états). `ui/theme.py` en
+  fait une `QPalette`, `ui/style.py` la feuille de style, `ui/icons.py` les
+  indicateurs (chevrons, coche) que la feuille de style empêche Qt de dessiner.
 - **Catalogue d'hypothèses** : `diagnostic.CATALOGUE` est la source unique des
   titres, résumés, déclencheurs, causes et confirmations ; les règles y
   puisent, l'aide et le rapport aussi. Ajouter une règle = ajouter sa fiche.
@@ -151,10 +158,16 @@ docs/                          propositions, plan et compte rendu de phase
 - pymodbus n'est pas utilisé par l'application : la pile RTU est en propre.
   Il sert d'oracle dans les tests (CRC, encodage des PDU). Ne pas l'importer
   hors de `tests/`.
-- Couleurs : ne jamais coder du noir ou du blanc en dur dans un widget (les
-  deux thèmes doivent rester lisibles) ; la feuille de style `ui/style.py`
-  n'utilise que `palette(...)` ; les couleurs d'état (#2ea043 vert, #d29922
-  orange, #e5534b rouge, #a371f7 violet, #8b949e gris) sont communes.
+- Couleurs : **aucune couleur écrite dans un widget**, `tests/test_style.py`
+  refuse tout `#rrggbb` hors de `ui/palette.py`. La charte AD Automation est
+  la source unique : gris chauds et terracotta, thème sombre et thème clair
+  (crème). L'accent (`t.accent`) ne sert qu'à ce qui engage : bouton principal
+  (`setProperty("variant", "primary")`), onglet actif, focus, sélection,
+  progression. Une mesure se qualifie avec `palette.color(State.OK / WARN /
+  ERROR / SPECIAL / MUTED)`, dont la nuance dépend du thème ; le contraste
+  minimal (4:1 sur chaque fond) est vérifié par test. Les couches basses ne
+  connaissent pas les couleurs : `SCORE_LEGEND` donne un niveau (`ok`, `warn`,
+  `error`), l'interface le traduit en couleur.
 - Textes : tout libellé visible passe par `tr()` et a son entrée dans
   `i18n_en.py`. Les énumérations gardent leur valeur française et sont
   traduites au point d'affichage (`tr(e.value)`).

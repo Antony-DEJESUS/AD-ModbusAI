@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFrame,
-    QHBoxLayout,
     QInputDialog,
     QLabel,
     QPushButton,
@@ -17,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from modbusai.i18n import tr
 from modbusai.modbus.codec import DisplayMode, DisplayOptions, Radix
+from modbusai.ui.widgets.labels import section
 
 
 class ActionsPanel(QFrame):
@@ -27,22 +27,24 @@ class ActionsPanel(QFrame):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setFixedWidth(170)
+        self.setObjectName("card")  # carte de la charte (ui/style.py)
+        self.setFixedWidth(186)
 
         self.read_btn = QPushButton(tr("LECTURE"))
+        self.read_btn.setProperty("variant", "primary")
         self.write_btn = QPushButton(tr("ECRITURE"))
         for b in (self.read_btn, self.write_btn):
             b.setMinimumHeight(30)
 
         self.auto_reconnect = QCheckBox(tr("Reconnexion auto"))
         self.cyclic = QCheckBox(tr("Cyclique"))
-        self.cycle_btn = QPushButton("…")
-        self.cycle_btn.setFixedWidth(28)
+        self.cycle_btn = QPushButton()
+        self.cycle_btn.setProperty("variant", "quiet")
         self.cycle_btn.setToolTip(tr("Période du cycle (ms)"))
         self.stop_cycle_btn = QPushButton(tr("ARRET CYCLE"))
         self.stop_cycle_btn.setEnabled(False)
         self.cycle_period_ms = 1000
+        self._show_period()
 
         self.byte_swap = QCheckBox(tr("Inversion Octets"))
         self.word_swap = QCheckBox(tr("Inversion Mots"))
@@ -52,7 +54,7 @@ class ActionsPanel(QFrame):
             self.display_mode.addItem(tr(m.value), m)
         self.display_mode.setCurrentIndex(list(DisplayMode).index(DisplayMode.WORD16))
         self.order_label = QLabel()
-        self.order_label.setStyleSheet("color: #555;")
+        self.order_label.setProperty("variant", "muted")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
@@ -60,18 +62,15 @@ class ActionsPanel(QFrame):
         layout.addWidget(self.write_btn)
         layout.addWidget(_hsep())
         layout.addWidget(self.auto_reconnect)
-        cyc = QHBoxLayout()
-        cyc.addWidget(self.cyclic)
-        cyc.addStretch(1)
-        cyc.addWidget(self.cycle_btn)
-        layout.addLayout(cyc)
+        layout.addWidget(self.cyclic)
+        layout.addWidget(self.cycle_btn)
         layout.addWidget(self.stop_cycle_btn)
         layout.addWidget(_hsep())
         layout.addWidget(self.byte_swap)
         layout.addWidget(self.word_swap)
         layout.addWidget(self.unsigned)
         layout.addSpacing(6)
-        layout.addWidget(QLabel(tr("Mode d'affichage")))
+        layout.addWidget(section(tr("Mode d'affichage")))
         layout.addWidget(self.display_mode)
         layout.addWidget(self.order_label)
         layout.addStretch(1)
@@ -119,9 +118,16 @@ class ActionsPanel(QFrame):
         self.display_changed.emit()
 
     def _ask_period(self) -> None:
-        value, ok = QInputDialog.getInt(self, "Cycle", "Période du cycle (ms) :", self.cycle_period_ms, 20, 600000, 100)
+        value, ok = QInputDialog.getInt(
+            self, tr("Cycle"), tr("Période du cycle (ms) :"), self.cycle_period_ms, 20, 600000, 100
+        )
         if ok:
             self.cycle_period_ms = value
+            self._show_period()
+
+    def _show_period(self) -> None:
+        """La période est lisible sur le bouton : un bouton vide n'apprend rien."""
+        self.cycle_btn.setText(tr("Période : {p0} ms").format(p0=self.cycle_period_ms))
 
 
 def _hsep() -> QFrame:

@@ -23,22 +23,23 @@ from modbusai.analysis.sniffer import BusCounters, FrameKind, SniffedFrame, Tran
 from modbusai.i18n import tr
 from modbusai.modbus.records import ExchangeStatus
 from modbusai.transport.records import LinkSettings
+from modbusai.ui.palette import State, color
 
 MAX_ROWS = 3000
-_STATUS_COLOR = {
-    ExchangeStatus.OK: "#2ea043",
-    ExchangeStatus.TIMEOUT: "#d29922",
-    ExchangeStatus.CRC_ERROR: "#e5534b",
-    ExchangeStatus.MODBUS_EXCEPTION: "#e5534b",
+_STATUS_STATE = {
+    ExchangeStatus.OK: State.OK,
+    ExchangeStatus.TIMEOUT: State.WARN,
+    ExchangeStatus.CRC_ERROR: State.ERROR,
+    ExchangeStatus.MODBUS_EXCEPTION: State.ERROR,
 }
-_KIND_COLOR = {FrameKind.INVALID: "#e5534b", FrameKind.UNKNOWN: "#d29922", FrameKind.BROADCAST: "#a371f7"}
+_KIND_STATE = {FrameKind.INVALID: State.ERROR, FrameKind.UNKNOWN: State.WARN, FrameKind.BROADCAST: State.SPECIAL}
 
 
-def _item(text: str, color: str | None = None, center: bool = False) -> QTableWidgetItem:
+def _item(text: str, tint: str | None = None, center: bool = False) -> QTableWidgetItem:
     it = QTableWidgetItem(text)
     it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsEditable)
-    if color:
-        it.setForeground(QColor(color))
+    if tint:
+        it.setForeground(QColor(tint))
     if center:
         it.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
     return it
@@ -55,6 +56,7 @@ class SnifferPage(QWidget):
         self._listening = False
 
         self.start_btn = QPushButton(tr("DÉMARRER ÉCOUTE"))
+        self.start_btn.setProperty("variant", "primary")
         self.stop_btn = QPushButton(tr("ARRÊTER"))
         self.stop_btn.setEnabled(False)
         self.clear_btn = QPushButton(tr("EFFACER"))
@@ -67,7 +69,7 @@ class SnifferPage(QWidget):
             "Écoute seule : l'outil n'émet jamais. Branché en parallèle du maître existant, "
             "il voit requêtes et réponses."
         )
-        self.hint.setStyleSheet("color: #8b949e;")
+        self.hint.setProperty("variant", "muted")
 
         top = QHBoxLayout()
         top.addWidget(self.start_btn)
@@ -193,7 +195,8 @@ class SnifferPage(QWidget):
             t.removeRow(0)
         row = t.rowCount()
         t.insertRow(row)
-        color = _KIND_COLOR.get(sf.kind)
+        kind = _KIND_STATE.get(sf.kind)
+        tint = None if kind is None else color(kind)
         silence = "" if sf.frame.silence_before_ns is None else f"{sf.frame.silence_before_ns / 1e6:.1f}"
         cells = [
             sf.wall_time.strftime("%H:%M:%S.%f")[:-3],
@@ -205,39 +208,40 @@ class SnifferPage(QWidget):
             silence,
         ]
         for col, text in enumerate(cells):
-            t.setItem(row, col, _item(text, color, center=col in (2, 3, 6)))
+            t.setItem(row, col, _item(text, tint, center=col in (2, 3, 6)))
         if self.autoscroll.isChecked():
             t.scrollToBottom()
 
-    def _append_transaction(self, tr: Transaction) -> None:
+    def _append_transaction(self, transaction: Transaction) -> None:
         t = self.transactions
         if t.rowCount() >= MAX_ROWS:
             t.removeRow(0)
         row = t.rowCount()
         t.insertRow(row)
-        color = _STATUS_COLOR.get(tr.status)
-        resp = tr.response
+        status = _STATUS_STATE.get(transaction.status)
+        tint = None if status is None else color(status)
+        resp = transaction.response
         status_text = {
             ExchangeStatus.OK: "OK",
             ExchangeStatus.TIMEOUT: "SANS RÉPONSE",
             ExchangeStatus.CRC_ERROR: "RÉPONSE CORROMPUE",
-            ExchangeStatus.MODBUS_EXCEPTION: f"EXCEPTION {tr.exception_code:02X}"
-            if tr.exception_code is not None
+            ExchangeStatus.MODBUS_EXCEPTION: f"EXCEPTION {transaction.exception_code:02X}"
+            if transaction.exception_code is not None
             else "EXCEPTION",
-        }.get(tr.status, tr.status.name)
+        }.get(transaction.status, transaction.status.name)
         cells = [
-            tr.timestamp.strftime("%H:%M:%S.%f")[:-3],
-            str(tr.slave_id),
-            function_name(tr.function),
-            tr.request.detail
+            transaction.timestamp.strftime("%H:%M:%S.%f")[:-3],
+            str(transaction.slave_id),
+            function_name(transaction.function),
+            transaction.request.detail
             + (f" -> {resp.detail}" if resp is not None and resp.kind is not FrameKind.INVALID else ""),
-            tr.request.frame.hex,
+            transaction.request.frame.hex,
             resp.frame.hex if resp is not None else "-",
-            f"{tr.response_time_ms:.1f}" if tr.response_time_ms is not None else "-",
+            f"{transaction.response_time_ms:.1f}" if transaction.response_time_ms is not None else "-",
             status_text,
         ]
         for col, text in enumerate(cells):
-            t.setItem(row, col, _item(text, color if col == 7 else None, center=col in (1, 6)))
+            t.setItem(row, col, _item(text, tint if col == 7 else None, center=col in (1, 6)))
         if self.autoscroll.isChecked():
             t.scrollToBottom()
 
@@ -245,7 +249,7 @@ class SnifferPage(QWidget):
         stats = self.session.stats(sources=["espion"])
         self.stats.setRowCount(len(stats))
         for row, st in enumerate(sorted(stats.values(), key=lambda s: s.slave_id)):
-            ok_color = "#2ea043" if st.ok_ratio >= 0.99 else ("#d29922" if st.ok_ratio >= 0.9 else "#e5534b")
+            ok_color = color(State.OK if st.ok_ratio >= 0.99 else (State.WARN if st.ok_ratio >= 0.9 else State.ERROR))
             cells = [
                 str(st.slave_id),
                 str(st.total),

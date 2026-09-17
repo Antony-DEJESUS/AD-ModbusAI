@@ -75,6 +75,7 @@ class MainWindow(QMainWindow):
         self.diagnostic_page = DiagnosticPage(self.session)
         self.slave_page = SlavePage(self.store)
         self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
         self._tab_index: dict[Tab, int] = {}
         for tab, page in (
             (Tab.MASTER, self.master_page),
@@ -85,6 +86,7 @@ class MainWindow(QMainWindow):
         ):
             self._tab_index[tab] = self.tabs.addTab(page, tr(tab.value))
         self.status_label = QLabel(tr("Status : déconnecté"))
+        self.status_label.setProperty("variant", "muted")
         credit = tr("Fait avec Claude Code par {p0}").format(p0=AUTHOR)
         self.credit_label = QLabel(f"<a href='about' style='color: inherit; text-decoration: none;'>{credit}</a>")
         self.credit_label.setObjectName("credit")
@@ -95,11 +97,12 @@ class MainWindow(QMainWindow):
 
         central = QWidget()
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(4)
+        layout.setContentsMargins(12, 10, 12, 8)
+        layout.setSpacing(8)
         layout.addWidget(self.connection_bar)
         layout.addWidget(self.tabs, 1)
         footer = QHBoxLayout()
+        footer.setContentsMargins(4, 0, 4, 0)
         footer.addWidget(self.status_label, 1)
         footer.addWidget(self.credit_label)
         layout.addLayout(footer)

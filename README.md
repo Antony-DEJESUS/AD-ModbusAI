@@ -12,6 +12,9 @@ passer en espion ou en serveur esclave ferme la liaison maître automatiquement.
 | DIAGNOSTIC | campagnes minutées, test de torture expliqué phase par phase, statistiques, hypothèses classées avec légende et aide, tests pour départager, export txt avec toutes les trames |
 | SERVEUR ESCLAVE | simulateur d'esclave façon Mod_RSsim (RTU ou TCP) avec injection de défauts, adresse d'écoute et maîtres connectés |
 
+Habillage : charte AD Automation (gris chauds et terracotta), thème sombre et
+thème clair, définie une seule fois dans `modbusai/ui/palette.py`.
+
 Version : barre de titre et pop-up À propos (`modbusai/__init__.py`), historique dans `CHANGELOG.md`.
 
 ## Lancer depuis les sources

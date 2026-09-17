@@ -26,6 +26,7 @@ from modbusai.modbus.codec import Radix, format_int, parse_int
 from modbusai.modbus.slave import TABLE_SIZE, DataStore, HandledRequest, SlaveConfig, Table
 from modbusai.transport.netinfo import is_wildcard, local_ipv4_addresses
 from modbusai.transport.records import LinkSettings, TcpSettings
+from modbusai.ui.palette import State, color
 from modbusai.ui.widgets.log_console import LogPanel
 
 COLUMNS = 10
@@ -151,22 +152,26 @@ class RegisterTableModel(QAbstractTableModel):
 
 
 class Led(QLabel):
-    """Voyant rond : allumé un court instant à chaque événement."""
+    """Voyant : allumé un court instant à chaque événement."""
 
-    def __init__(self, text: str, color: str, parent: QWidget | None = None) -> None:
+    def __init__(self, text: str, state: State, parent: QWidget | None = None) -> None:
         super().__init__(text, parent)
-        self._color = color
+        self._color = color(state)
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._off)
         self._off()
 
     def blink(self, ms: int = 150) -> None:
-        self.setStyleSheet(f"font-weight: bold; color: {self._color};")
+        self.setStyleSheet(
+            f"color: {self._color}; border: 1px solid {self._color}; border-radius: 9px;"
+            " padding: 1px 8px; font-weight: 700;"
+        )
         self._timer.start(ms)
 
     def _off(self) -> None:
-        self.setStyleSheet("font-weight: bold; color: #555;")
+        off = color(State.MUTED)
+        self.setStyleSheet(f"color: {off}; border: 1px solid {off}; border-radius: 9px; padding: 1px 8px;")
 
 
 def parse_slave_ids(text: str) -> set[int]:
@@ -220,10 +225,11 @@ class SlavePage(QWidget):
         self.corrupt.setToolTip(tr("Part des réponses au CRC volontairement faux (simule du bruit)"))
         self.read_only = QCheckBox(tr("Lecture seule"))
         self.start_btn = QPushButton(tr("DÉMARRER SERVEUR"))
+        self.start_btn.setProperty("variant", "primary")
         self.stop_btn = QPushButton(tr("ARRÊTER"))
         self.stop_btn.setEnabled(False)
-        self.rx_led = Led(tr("RX"), "#2ea043")
-        self.tx_led = Led(tr("TX"), "#e5534b")
+        self.rx_led = Led(tr("RX"), State.OK)
+        self.tx_led = Led(tr("TX"), State.ERROR)
         self.counters_label = QLabel(tr("Serveur arrêté"))
         self.link_label = QLabel(tr("Serveur arrêté"))
         self.masters_label = QLabel(tr("Maîtres connectés : -"))

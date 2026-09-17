@@ -63,6 +63,8 @@ from modbusai.analysis.stress import StressPhase, StressReport, default_scenario
 from modbusai.i18n import tr
 from modbusai.modbus.records import Request
 from modbusai.transport.records import LinkSettings
+from modbusai.ui.palette import State, color
+from modbusai.ui.widgets.labels import section
 from modbusai.ui.widgets.request_bar import RegisterType
 
 # Par défaut on écarte le scan (ses adresses absentes ne sont pas des pannes à
@@ -78,11 +80,16 @@ SOURCES = (
 )
 
 
-def _score_color(score: int) -> str:
-    for lo, hi, _label, color in SCORE_LEGEND:
+def _score_state(score: int) -> State:
+    """Le catalogue donne un niveau ; la couleur vient de la charte."""
+    for lo, hi, _label, level in SCORE_LEGEND:
         if lo <= score <= hi:
-            return color
-    return SCORE_LEGEND[-1][3]
+            return State(level)
+    return State(SCORE_LEGEND[-1][3])
+
+
+def _score_color(score: int) -> str:
+    return color(_score_state(score))
 
 
 def _mmss(seconds: float) -> str:
@@ -97,14 +104,19 @@ class ScoreLegend(QWidget):
         super().__init__(parent)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(QLabel(tr("Score :")))
-        for lo, hi, label, color in SCORE_LEGEND:
-            chip = QLabel(f" {lo}-{hi} {tr(label)} ")
-            chip.setStyleSheet(f"background: {color}; color: white; border-radius: 4px; padding: 1px 4px;")
+        title = QLabel(tr("Score :"))
+        title.setProperty("variant", "muted")
+        layout.addWidget(title)
+        for lo, hi, label, level in SCORE_LEGEND:
+            chip = QLabel(f"{lo}-{hi}  {tr(label)}")
+            tint = color(State(level))
+            chip.setStyleSheet(
+                f"color: {tint}; border: 1px solid {tint}; border-radius: 9px; padding: 1px 9px; font-weight: 600;"
+            )
             layout.addWidget(chip)
         info = QLabel("?")
         info.setToolTip(tr(SCORE_EXPLANATION))
-        info.setStyleSheet("font-weight: bold;")
+        info.setProperty("variant", "muted")
         layout.addWidget(info)
         layout.addStretch(1)
         self.setToolTip(tr(SCORE_EXPLANATION))
@@ -129,8 +141,9 @@ class HypothesisHelpDialog(QDialog):
     @staticmethod
     def build_html() -> str:
         parts = [f"<h2>{tr('Comment lire le diagnostic')}</h2>", f"<p>{tr(SCORE_EXPLANATION)}</p>", "<ul>"]
-        for lo, hi, label, color in SCORE_LEGEND:
-            parts.append(f'<li><b style="color:{color}">{lo} {tr("à")} {hi}</b> : {tr(label)}</li>')
+        for lo, hi, label, level in SCORE_LEGEND:
+            tint = color(State(level))
+            parts.append(f'<li><b style="color:{tint}">{lo} {tr("à")} {hi}</b> : {tr(label)}</li>')
         parts.append(f"</ul><h2>{tr('Hypothèses possibles')}</h2>")
         for info in CATALOGUE.values():
             parts.append(f"<h3>{tr(info.title)}</h3><p><i>{tr(info.summary)}</i></p>")
@@ -201,6 +214,7 @@ class DiagnosticPage(QWidget):
         self.stress_duration.setSuffix(" s")
 
         self.run_btn = QPushButton(tr("LANCER CAMPAGNE"))
+        self.run_btn.setProperty("variant", "primary")
         self.stress_btn = QPushButton(tr("TEST DE TORTURE"))
         self.stress_btn.setToolTip(
             tr("Enchaîne référence, rafale, trames longues, timeout serré (et vitesse réduite en RTU)")
@@ -284,7 +298,7 @@ class DiagnosticPage(QWidget):
                 tr("Timeouts"),
                 tr("CRC"),
                 tr("Exceptions"),
-                tr("Incohérentes"),
+                tr("Incohér."),
                 tr("Liaison"),
                 tr("Moy (ms)"),
                 tr("P95 (ms)"),
@@ -312,11 +326,11 @@ class DiagnosticPage(QWidget):
         self.results.setPlaceholderText(tr("Résultats des campagnes et du test de torture"))
 
         right = QVBoxLayout()
-        right.addWidget(QLabel(tr("Indices")))
+        right.addWidget(section(tr("Indices")))
         right.addWidget(self.detail, 2)
-        right.addWidget(QLabel(tr("Tests pour départager")))
+        right.addWidget(section(tr("Tests pour départager")))
         right.addWidget(tests_widget, 2)
-        right.addWidget(QLabel(tr("Résultats")))
+        right.addWidget(section(tr("Résultats")))
         right.addWidget(self.results, 2)
         right_w = QWidget()
         right_w.setLayout(right)
@@ -330,10 +344,10 @@ class DiagnosticPage(QWidget):
         analysis_layout = QVBoxLayout()
         analysis_layout.setContentsMargins(0, 0, 0, 0)
         analysis_layout.addLayout(top)
-        analysis_layout.addWidget(QLabel(tr("Statistiques par esclave")))
+        analysis_layout.addWidget(section(tr("Statistiques par esclave")))
         analysis_layout.addWidget(self.stats_table)
         head = QHBoxLayout()
-        head.addWidget(QLabel(tr("Hypothèses classées")))
+        head.addWidget(section(tr("Hypothèses classées")))
         head.addSpacing(12)
         head.addWidget(self.legend)
         analysis_layout.addLayout(head)
@@ -522,7 +536,7 @@ class DiagnosticPage(QWidget):
         t.setRowCount(len(self._stats))
         for row, st in enumerate(sorted(self._stats.values(), key=lambda s: s.slave_id)):
             ratio = (st.ok + st.exception) / st.total if st.total else 0.0
-            color = "#2ea043" if ratio >= 0.99 else ("#d29922" if ratio >= 0.9 else "#e5534b")
+            tint = color(State.OK if ratio >= 0.99 else (State.WARN if ratio >= 0.9 else State.ERROR))
             cells = [
                 str(st.slave_id),
                 str(st.total),
@@ -542,7 +556,7 @@ class DiagnosticPage(QWidget):
                 it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 it.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 if col == 2:
-                    it.setForeground(QColor(color))
+                    it.setForeground(QColor(tint))
                 t.setItem(row, col, it)
 
     def _show_hypothesis(self, row: int) -> None:
@@ -580,7 +594,7 @@ class DiagnosticPage(QWidget):
             lay.addWidget(btn)
         else:
             manual = QLabel(tr("manuel"))
-            manual.setStyleSheet("color: #8b949e;")
+            manual.setProperty("variant", "muted")
             lay.addWidget(manual)
         return w
 

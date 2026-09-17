@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QFormLayout, QFrame, QGroupBox, QHBoxLayout, QLabe
 
 from modbusai.i18n import tr
 from modbusai.modbus.records import ExchangeRecord
+from modbusai.ui.palette import State, color
 
 
 class ExchangePanel(QFrame):
@@ -14,7 +15,7 @@ class ExchangePanel(QFrame):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setObjectName("card")  # carte de la charte (ui/style.py)
         self.setMinimumWidth(300)
 
         self.clear_btn = QPushButton(tr("EFFACER"))
@@ -54,7 +55,7 @@ class ExchangePanel(QFrame):
 
     def show_record(self, rec: ExchangeRecord) -> None:
         self.status.setText(rec.status.name)
-        self.status.setStyleSheet("font-weight: bold; color: %s;" % ("#2ea043" if rec.ok else "#e5534b"))
+        self.status.setStyleSheet(f"font-weight: 700; color: {color(State.OK if rec.ok else State.ERROR)};")
         self.response_time.setText(f"{rec.response_time_ms:.1f} ms" if rec.response_time_ms is not None else "-")
         tt = rec.transaction_time_ms
         self.transaction_time.setText(f"{tt:.1f} ms" if tt is not None else "-")

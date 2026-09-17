@@ -5,6 +5,26 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 0.3.2 - Charte graphique AD : gris foncé et terracotta
+
+- Charte unique dans `modbusai/ui/palette.py` : gris chauds et terracotta
+  (#D97757 en sombre, #C2603E sur fond crème en clair). La palette Qt, la
+  feuille de style et les couleurs d'état en découlent ; plus aucune couleur
+  n'est écrite dans un widget, un test le vérifie.
+- L'accent terracotta est réservé à ce qui engage : bouton principal de chaque
+  onglet, onglet actif, focus, sélection, coche, progression.
+- Thème clair repensé en crème (#F5F2EC) plutôt qu'en gris Windows, thème
+  sombre en gris chaud (#232221) : même identité dans les deux modes.
+- Couleurs d'état (vert, ambre, rouge, violet) déclinées par thème et testées
+  en contraste : au moins 4:1 sur chaque fond, dans les deux thèmes.
+- Habillage : coins arrondis et cartes, onglets soulignés à l'accent, bandeau
+  d'en-tête avec logo, nom, version et pastille d'état de liaison, cases à
+  cocher et boutons radio dessinés, barres de défilement fines, hiérarchie de
+  titres de section.
+- Détails d'ergonomie : la période du cycle s'affiche sur son bouton, le bouton
+  de rafraîchissement des ports est libellé (le glyphe ↻ manque à certaines
+  polices), l'en-tête « Incohérentes » ne déborde plus du tableau.
+
 ## 0.3.1 - Retours de chantier : flèches, bascule de rôle, trace des trames
 
 - Flèches des listes déroulantes et des compteurs de nouveau visibles : la

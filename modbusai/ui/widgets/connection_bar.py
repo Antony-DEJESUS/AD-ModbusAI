@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QWidget
+from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from modbusai import APP_NAME, __version__
 from modbusai.i18n import LANGUAGES, tr
 from modbusai.transport.records import LinkSettings
+from modbusai.ui.palette import State, color
 from modbusai.ui.resources import logo_pixmap
 
 
@@ -21,20 +23,27 @@ class ConnectionBar(QFrame):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setObjectName("topBar")
 
         self.logo = QLabel()
         self.logo.setToolTip("AD Automation")
+        self.app_name = QLabel(APP_NAME)
+        self.app_name.setObjectName("appName")
+        self.app_tag = QLabel(f"{tr('DIAGNOSTIC MODBUS')}  ·  v{__version__}")
+        self.app_tag.setObjectName("appTag")
+        self.state_dot = QLabel("●")
         self.config_btn = QPushButton(tr("CONFIGURATION"))
         self.protocol = QComboBox()
         self.protocol.addItem(tr("RTU"))
         self.protocol.addItem(tr("TCP"))
         self.protocol.setToolTip(tr("RTU : liaison série RS-485 / RS-232. TCP : Modbus TCP sur réseau IP."))
         self.summary = QLabel(tr("Aucun port"))
-        self.summary.setStyleSheet("font-weight: bold;")
+        self.summary.setObjectName("linkSummary")
         self.connect_btn = QPushButton(tr("CONNEXION"))
+        self.connect_btn.setProperty("variant", "primary")
         self.disconnect_btn = QPushButton(tr("DECONNEXION"))
         self.disconnect_btn.setEnabled(False)
+        self._connected = False
         self.language = QComboBox()
         for code, label in LANGUAGES.items():
             self.language.addItem(label, code)
@@ -42,14 +51,34 @@ class ConnectionBar(QFrame):
         self.theme_btn = QPushButton(tr("THÈME"))
         self.theme_btn.setToolTip(tr("Basculer clair / sombre"))
         self.quit_btn = QPushButton(tr("QUITTER"))
+        self.quit_btn.setProperty("variant", "quiet")
+
+        identity = QVBoxLayout()
+        identity.setContentsMargins(0, 0, 0, 0)
+        identity.setSpacing(0)
+        identity.addWidget(self.app_name)
+        identity.addWidget(self.app_tag)
+
+        link = QHBoxLayout()
+        link.setContentsMargins(0, 0, 0, 0)
+        link.setSpacing(6)
+        link.addWidget(self.state_dot)
+        link.addWidget(self.summary)
+        link_w = QWidget()
+        link_w.setLayout(link)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(8)
         layout.addWidget(self.logo)
+        layout.addLayout(identity)
+        layout.addSpacing(6)
+        layout.addWidget(_vsep())
+        layout.addSpacing(6)
         layout.addWidget(self.config_btn)
         layout.addWidget(self.protocol)
-        layout.addWidget(self.summary)
-        layout.addWidget(_vsep())
+        layout.addWidget(link_w)
+        layout.addSpacing(6)
         layout.addWidget(self.connect_btn)
         layout.addWidget(self.disconnect_btn)
         layout.addStretch(1)
@@ -88,15 +117,23 @@ class ConnectionBar(QFrame):
 
     def set_theme(self, name: str) -> None:
         self.theme_btn.setText(tr("THÈME : SOMBRE") if name == "sombre" else tr("THÈME : CLAIR"))
-        self.logo.setPixmap(logo_pixmap(28, dark=(name == "sombre")))
+        self.logo.setPixmap(logo_pixmap(30, dark=(name == "sombre")))
+        self._paint_state()
 
     def set_connected(self, connected: bool) -> None:
         self.connect_btn.setEnabled(not connected)
         self.disconnect_btn.setEnabled(connected)
         self.config_btn.setEnabled(not connected)
         self.protocol.setEnabled(not connected)
-        # Couleur du thème quand déconnecté (thème sombre Windows compris), vert quand connecté
-        self.summary.setStyleSheet("font-weight: bold; color: #2ea043;" if connected else "font-weight: bold;")
+        self._connected = connected
+        self._paint_state()
+
+    def _paint_state(self) -> None:
+        """Pastille de liaison : verte connectée, grise au repos (jamais de noir
+        ni de blanc en dur, les deux thèmes doivent rester lisibles)."""
+        tint = color(State.OK if self._connected else State.MUTED)
+        self.state_dot.setStyleSheet(f"color: {tint}; font-size: 13pt;")
+        self.summary.setStyleSheet(f"color: {tint if self._connected else 'palette(text)'};")
 
 
 def _vsep() -> QFrame:

@@ -33,6 +33,21 @@ def chevron(color: QColor, direction: str = "down") -> str:
     return _cache[key]
 
 
+def check(color: QColor) -> str:
+    """Coche des cases à cocher : la feuille de style remplace le fond natif,
+    Qt cesse alors de dessiner l'indicateur."""
+    key = (color.name(), "check")
+    cached = _cache.get(key)
+    if cached is not None:
+        return cached
+    path = Path(tempfile.gettempdir()) / f"modbusai_check_{color.name().lstrip('#')}.png"
+    if not path.exists() and not _draw(color, "check", path):
+        _cache[key] = ""
+        return ""
+    _cache[key] = path.as_posix()
+    return _cache[key]
+
+
 def _draw(color: QColor, direction: str, path: Path) -> bool:
     try:
         pix = QPixmap(SIZE, SIZE)
@@ -47,6 +62,10 @@ def _draw(color: QColor, direction: str, path: Path) -> bool:
         s = SIZE
         if direction == "up":
             points = ((0.26, 0.60), (0.50, 0.38), (0.74, 0.60))
+        elif direction == "check":
+            pen.setWidthF(2.1)
+            painter.setPen(pen)
+            points = ((0.24, 0.52), (0.43, 0.70), (0.77, 0.32))
         else:
             points = ((0.26, 0.40), (0.50, 0.62), (0.74, 0.40))
         painter.drawPolyline([QPointF(x * s, y * s) for x, y in points])

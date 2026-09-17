@@ -38,8 +38,7 @@ class SerialForm(QWidget):
 
         self.port = QComboBox()
         self.port.setEditable(True)  # permet de saisir un COM non détecté
-        refresh = QPushButton("↻")
-        refresh.setFixedWidth(28)
+        refresh = QPushButton(tr("ACTUALISER"))  # libellé plutôt qu'un glyphe : toutes les polices ne l'ont pas
         refresh.setToolTip(tr("Rafraîchir la liste des ports"))
         refresh.clicked.connect(self._refresh_ports)
         port_row = QHBoxLayout()
@@ -213,7 +212,7 @@ class TcpForm(QWidget):
             "Note : le mode espion n'est pas disponible en TCP (il faut une recopie de port sur le switch)."
         )
         self.hint.setWordWrap(True)
-        self.hint.setStyleSheet("color: #8b949e;")
+        self.hint.setProperty("variant", "muted")
         layout.addWidget(self.hint)
 
         self.ping_btn.clicked.connect(self._ping_host)

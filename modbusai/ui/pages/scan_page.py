@@ -32,15 +32,16 @@ from modbusai.analysis.scanner import COMMON_BAUDRATES, ScanPlan, ScanResult, Sc
 from modbusai.i18n import tr
 from modbusai.modbus.records import FunctionCode
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings
+from modbusai.ui.palette import State, color
 from modbusai.ui.widgets.config_dialog import BAUDRATES
 
-_STATUS_COLOR = {
-    ScanStatus.PRESENT: "#2ea043",
-    ScanStatus.PRESENT_EXCEPTION: "#2ea043",
-    ScanStatus.NOISY: "#d29922",
-    ScanStatus.CONFLICT: "#e5534b",
-    ScanStatus.ERROR: "#a371f7",
-    ScanStatus.ABSENT: "#8b949e",
+_STATUS_STATE = {
+    ScanStatus.PRESENT: State.OK,
+    ScanStatus.PRESENT_EXCEPTION: State.OK,
+    ScanStatus.NOISY: State.WARN,
+    ScanStatus.CONFLICT: State.ERROR,
+    ScanStatus.ERROR: State.SPECIAL,
+    ScanStatus.ABSENT: State.MUTED,
 }
 
 
@@ -135,7 +136,7 @@ class ScanPage(QWidget):
         self.sweep_widget = QWidget()
         self.sweep_widget.setLayout(sweep_layout)
         self.link_hint = QLabel("")
-        self.link_hint.setStyleSheet("color: #8b949e;")
+        self.link_hint.setProperty("variant", "muted")
         self.link_hint.setWordWrap(True)
 
         form = QFormLayout()
@@ -173,6 +174,7 @@ class ScanPage(QWidget):
         params.setMaximumWidth(500)
 
         self.start_btn = QPushButton(tr("LANCER SCAN"))
+        self.start_btn.setProperty("variant", "primary")
         self.cancel_btn = QPushButton(tr("ARRÊTER"))
         self.cancel_btn.setEnabled(False)
         self.clear_btn = QPushButton(tr("EFFACER"))
@@ -330,7 +332,7 @@ class ScanPage(QWidget):
         t = self.table
         row = t.rowCount()
         t.insertRow(row)
-        color = _STATUS_COLOR[r.status]
+        tint = color(_STATUS_STATE[r.status])
         cells = [
             str(r.slave_id),
             tr(r.status.value),
@@ -344,7 +346,7 @@ class ScanPage(QWidget):
             it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsEditable)
             it.setToolTip(text)
             if col == 1:
-                it.setForeground(QColor(color))
+                it.setForeground(QColor(tint))
             if col in (0, 2):
                 it.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             t.setItem(row, col, it)

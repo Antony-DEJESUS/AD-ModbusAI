@@ -21,10 +21,11 @@ from modbusai.transport.records import LinkSettings, Parity, SerialSettings
 
 MIN_SAMPLES = 5  # en dessous, on ne conclut pas
 
+# Plage, libellé et niveau de gravité ; la couleur appartient à la charte (ui/palette.py).
 SCORE_LEGEND = (
-    (0, 49, "peu probable", "#2ea043"),
-    (50, 74, "probable", "#d29922"),
-    (75, 100, "très probable", "#e5534b"),
+    (0, 49, "peu probable", "ok"),
+    (50, 74, "probable", "warn"),
+    (75, 100, "très probable", "error"),
 )
 SCORE_EXPLANATION = (
     "Le score (0 à 100) est une vraisemblance : il monte avec la part des échanges qui présentent la signature "
