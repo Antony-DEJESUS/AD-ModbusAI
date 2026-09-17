@@ -5,6 +5,21 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 0.3.5 - Icônes et journal en colonnes
+
+- Jeu d'icônes dessiné à l'exécution (`ui/iconography.py`) : dix-huit tracés sur
+  une grille de 24, sans fichier ni dépendance, dans la couleur du thème. Posées
+  sur les onglets et sur les boutons d'action ; les icônes des boutons
+  principaux prennent la couleur du texte posé sur l'accent. Tout se repeint au
+  changement de thème, voyants et tuiles compris.
+- Journal en colonnes fixes (heure, n°, esclave, fonction, statut, temps, puis
+  les trames) avec un en-tête qui les nomme. Le serveur esclave a ses propres
+  colonnes (heure, maître, esclave, fonction, traitement, trames) : on lit une
+  console en balayant une colonne, pas en lisant des phrases.
+- Correction au passage : la feuille de style globale imposait sa police à la
+  console, dont la chasse fixe posée en code était ignorée depuis la 0.3.2. La
+  police à chasse fixe vient maintenant de la feuille de style elle-même.
+
 ## 0.3.4 - Marque AD, lisibilité à toutes les échelles, moins d'ambiguïté
 
 - Marque : le monogramme porte de nouveau les lettres « AD » dans l'interface

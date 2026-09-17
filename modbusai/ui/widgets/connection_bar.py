@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButto
 from modbusai import APP_NAME, __version__
 from modbusai.i18n import LANGUAGES, tr
 from modbusai.transport.records import LinkSettings
+from modbusai.ui.iconography import set_icon
 from modbusai.ui.palette import State, color
 from modbusai.ui.resources import logo_pixmap
 
@@ -43,6 +44,7 @@ class ConnectionBar(QFrame):
         )
         self.config_btn = QPushButton(tr("CONFIGURER"))
         self.config_btn.setToolTip(tr("Port et paramètres de la liaison du maître"))
+        set_icon(self.config_btn, "settings")
         self.protocol = QComboBox()
         self.protocol.addItem(tr("RTU"))
         self.protocol.addItem(tr("TCP"))
@@ -51,6 +53,7 @@ class ConnectionBar(QFrame):
         self.summary.setObjectName("linkSummary")
         self.connect_btn = QPushButton(tr("CONNECTER"))
         self.connect_btn.setToolTip(tr("Ouvre la liaison du maître"))
+        set_icon(self.connect_btn, "plug", on_accent=True)
         self.connect_btn.setProperty("variant", "primary")
         self.disconnect_btn = QPushButton(tr("DÉCONNECTER"))
         self.disconnect_btn.setEnabled(False)
@@ -61,10 +64,13 @@ class ConnectionBar(QFrame):
         self.language.setToolTip(tr("Langue"))
         self.theme_btn = QPushButton(tr("THÈME"))
         self.theme_btn.setToolTip(tr("Basculer clair / sombre"))
+        set_icon(self.theme_btn, "theme")
         self.about_btn = QPushButton(tr("À PROPOS"))
         self.about_btn.setToolTip(tr("Logo, version, historique et mode d'emploi"))
+        set_icon(self.about_btn, "info")
         self.quit_btn = QPushButton(tr("QUITTER"))
         self.quit_btn.setProperty("variant", "quiet")
+        set_icon(self.quit_btn, "power")
 
         identity = QVBoxLayout()
         identity.setContentsMargins(0, 0, 0, 0)

@@ -20,6 +20,7 @@ class StatTiles(QWidget):
         """``keys`` : (identifiant, libellé, état quand la valeur n'est pas nulle)."""
         super().__init__(parent)
         self._values: dict[str, QLabel] = {}
+        self._last: dict[str, int] = {}
         self._states: dict[str, State | None] = {}
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -44,6 +45,7 @@ class StatTiles(QWidget):
         layout.addStretch(1)
 
     def set_values(self, values: dict[str, int]) -> None:
+        self._last = dict(values)
         for key, label in self._values.items():
             count = values.get(key, 0)
             label.setText(str(count))
@@ -53,3 +55,7 @@ class StatTiles(QWidget):
 
     def reset(self) -> None:
         self.set_values({})
+
+    def repaint(self) -> None:
+        """Reprend les couleurs du thème courant."""
+        self.set_values(self._last)

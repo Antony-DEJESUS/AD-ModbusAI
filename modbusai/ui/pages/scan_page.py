@@ -32,6 +32,7 @@ from modbusai.analysis.scanner import COMMON_BAUDRATES, ScanPlan, ScanResult, Sc
 from modbusai.i18n import tr
 from modbusai.modbus.records import FunctionCode
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings
+from modbusai.ui.iconography import set_icon
 from modbusai.ui.metrics import text_width, use_tabular_figures
 from modbusai.ui.palette import State, color
 from modbusai.ui.style import PAGE_MARGINS
@@ -181,6 +182,10 @@ class ScanPage(QWidget):
         self.cancel_btn.setEnabled(False)
         self.clear_btn = QPushButton(tr("EFFACER"))
         self.copy_btn = QPushButton(tr("COPIER"))
+        set_icon(self.start_btn, "play", on_accent=True)
+        set_icon(self.cancel_btn, "stop")
+        set_icon(self.clear_btn, "trash")
+        set_icon(self.copy_btn, "copy")
         self.progress = QProgressBar()
         self.progress.setTextVisible(True)
         self.progress_label = QLabel(tr("Prêt. Le scan utilise la liaison du maître : connectez-vous d'abord."))

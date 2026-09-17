@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QFormLayout, QFrame, QGroupBox, QHBoxLayout, QLabe
 
 from modbusai.i18n import tr
 from modbusai.modbus.records import ExchangeRecord
+from modbusai.ui.iconography import set_icon
 from modbusai.ui.metrics import text_width
 from modbusai.ui.palette import State, color
 
@@ -20,6 +21,7 @@ class ExchangePanel(QFrame):
         self.setMinimumWidth(text_width(self, "Temps de réponse    999.9 ms", extra=40))
 
         self.clear_btn = QPushButton(tr("EFFACER"))
+        set_icon(self.clear_btn, "trash")
         self.clear_btn.setToolTip(tr("Vider la grille, le dernier échange et le journal"))
         self.clear_btn.clicked.connect(self.clear_requested)
 

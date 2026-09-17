@@ -52,7 +52,8 @@ modbusai/ui/                   couche 3 : Qt uniquement
     palette.py                 charte AD : jetons de couleur des deux thèmes, couleurs d'état (State)
     theme.py                   palette Qt construite depuis la charte, application du thème
     style.py                   feuille de style engendrée depuis les jetons (cartes, onglets, accent)
-    icons.py                   chevrons et coche dessinés à l'exécution dans la couleur du thème
+    icons.py                   chevrons et coche de la feuille de style, dessinés à l'exécution
+    iconography.py             jeu d'icônes (tracés 24x24), set_icon / set_tab_icon, refresh_all au changement de thème
     metrics.py                 largeurs et hauteurs tirées du texte, police à chiffres tabulaires
     widgets/labels.py          section() et muted() : étiquettes typées par la feuille de style
     widgets/stat_tiles.py      rangée de compteurs : valeur lisible, libellé discret, couleur si non nul
@@ -60,7 +61,7 @@ modbusai/ui/                   couche 3 : Qt uniquement
     network_tools.py           ping système dans un thread, ouverture de ncpa.cpl (Windows)
     pages/                     master_page, sniffer_page, scan_page, diagnostic_page, slave_page
     widgets/                   connection_bar, request_bar, actions_panel, register_grid, exchange_panel,
-                               log_console, config_dialog (volets série / TCP), about_dialog
+                               log_console (colonnes fixes + en-tête), config_dialog, about_dialog
 assets/                        marque mark-*.png (A + « AD »), icône .ico (A sur fond d'accent) ; source/ = artwork d'origine, non embarqué
 tools/make_logo.py             régénère marque et icône, --accent donne sa couleur à chaque outil de la gamme
 tests/                         pytest ; fake_slave.py (esclave sur pty), virtual_bus.py (bus RS-485 virtuel)
@@ -187,6 +188,15 @@ docs/                          propositions, plan et compte rendu de phase
   minimal (4:1 sur chaque fond) est vérifié par test. Les couches basses ne
   connaissent pas les couleurs : `SCORE_LEGEND` donne un niveau (`ok`, `warn`,
   `error`), l'interface le traduit en couleur.
+- Icônes : jamais d'image embarquée ni de glyphe Unicode dans un libellé (toutes
+  les polices ne les ont pas) ; `iconography.set_icon(widget, "nom")` pose une
+  icône du jeu, `on_accent=True` pour un bouton principal. Ajouter une icône =
+  ajouter un tracé dans `_PAINTERS`.
+- Journal : les lignes passent par `LogConsole.log_cells`, qui aligne sur les
+  colonnes déclarées (`MASTER_COLUMNS`, `SLAVE_COLUMNS`) ; la colonne mise en
+  évidence est colorée sans casser l'alignement. La police à chasse fixe vient
+  de la feuille de style (`#logConsole`) : la régler par `setFont` ne suffit
+  pas, le QSS global reprend la main.
 - Textes : tout libellé visible passe par `tr()` et a son entrée dans
   `i18n_en.py`. Les énumérations gardent leur valeur française et sont
   traduites au point d'affichage (`tr(e.value)`).

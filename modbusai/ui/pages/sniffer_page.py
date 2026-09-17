@@ -23,6 +23,7 @@ from modbusai.analysis.sniffer import BusCounters, FrameKind, SniffedFrame, Tran
 from modbusai.i18n import tr
 from modbusai.modbus.records import ExchangeStatus
 from modbusai.transport.records import LinkSettings
+from modbusai.ui.iconography import set_icon
 from modbusai.ui.palette import State, color
 from modbusai.ui.style import PAGE_MARGINS
 
@@ -61,6 +62,9 @@ class SnifferPage(QWidget):
         self.stop_btn = QPushButton(tr("ARRÊTER"))
         self.stop_btn.setEnabled(False)
         self.clear_btn = QPushButton(tr("EFFACER"))
+        set_icon(self.start_btn, "play", on_accent=True)
+        set_icon(self.stop_btn, "stop")
+        set_icon(self.clear_btn, "trash")
         self.autoscroll = QCheckBox(tr("Défilement auto"))
         self.autoscroll.setChecked(True)
         self.show_frames = QCheckBox(tr("Trames brutes"))

@@ -28,6 +28,8 @@ from modbusai.modbus.records import ExchangeRecord, ExchangeStatus
 from modbusai.modbus.slave import DataStore, SlaveConfig
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
 from modbusai.ui.controllers import CampaignController, ScanController, StressController
+from modbusai.ui.iconography import refresh_all as refresh_icons
+from modbusai.ui.iconography import set_tab_icon
 from modbusai.ui.pages.diagnostic_page import DiagnosticPage
 from modbusai.ui.pages.master_page import MasterPage
 from modbusai.ui.pages.scan_page import ScanPage
@@ -76,14 +78,16 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
         self._tab_index: dict[Tab, int] = {}
-        for tab, page in (
-            (Tab.MASTER, self.master_page),
-            (Tab.SNIFFER, self.sniffer_page),
-            (Tab.SCAN, self.scan_page),
-            (Tab.DIAGNOSTIC, self.diagnostic_page),
-            (Tab.SLAVE, self.slave_page),
+        for tab, page, glyph in (
+            (Tab.MASTER, self.master_page, "exchange"),
+            (Tab.SNIFFER, self.sniffer_page, "eye"),
+            (Tab.SCAN, self.scan_page, "search"),
+            (Tab.DIAGNOSTIC, self.diagnostic_page, "pulse"),
+            (Tab.SLAVE, self.slave_page, "server"),
         ):
-            self._tab_index[tab] = self.tabs.addTab(page, tr(tab.value))
+            index = self.tabs.addTab(page, tr(tab.value))
+            set_tab_icon(self.tabs, index, glyph)
+            self._tab_index[tab] = index
         self.status_label = QLabel(tr("Status : déconnecté"))
         self.status_label.setProperty("variant", "muted")
         credit = tr("Fait avec CC par {p0}").format(p0=AUTHOR)
@@ -227,12 +231,21 @@ class MainWindow(QMainWindow):
         saved = str(QSettings().value("ui/theme", "")) or system_theme(app)
         self._theme = apply_theme(app, saved)
         self.connection_bar.set_theme(self._theme)
+        self._repaint_state_colors()
+
+    def _repaint_state_colors(self) -> None:
+        """Les couleurs posées en code (icônes, voyants, tuiles) ne suivent pas la
+        feuille de style : on les repeint après un changement de thème."""
+        refresh_icons()
+        self.slave_page.repaint_state_colors()
+        self.diagnostic_page.refresh()
 
     def _toggle_theme(self) -> None:
         app = QApplication.instance()
         nxt = THEMES[(THEMES.index(self._theme) + 1) % len(THEMES)]
         self._theme = apply_theme(app, nxt)
         self.connection_bar.set_theme(self._theme)
+        self._repaint_state_colors()
         QSettings().setValue("ui/theme", self._theme)
 
     # ============================================================== liaison

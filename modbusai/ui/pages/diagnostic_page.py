@@ -63,6 +63,7 @@ from modbusai.analysis.stress import StressPhase, StressReport, default_scenario
 from modbusai.i18n import tr
 from modbusai.modbus.records import Request
 from modbusai.transport.records import LinkSettings
+from modbusai.ui.iconography import set_icon
 from modbusai.ui.metrics import line_height, text_width, use_tabular_figures
 from modbusai.ui.palette import State, color
 from modbusai.ui.style import PAGE_MARGINS
@@ -223,6 +224,9 @@ class DiagnosticPage(QWidget):
         )
         self.cancel_btn = QPushButton(tr("ARRÊTER"))
         self.cancel_btn.setEnabled(False)
+        set_icon(self.run_btn, "play", on_accent=True)
+        set_icon(self.stress_btn, "pulse")
+        set_icon(self.cancel_btn, "stop")
         self.progress = QProgressBar()
         self.progress.setTextVisible(True)
         self.countdown = QLabel(tr("Prêt."))
@@ -271,6 +275,10 @@ class DiagnosticPage(QWidget):
         self.clear_btn = QPushButton(tr("EFFACER HISTORIQUE"))
         self.export_btn = QPushButton(tr("EXPORTER TXT"))
         self.help_btn = QPushButton(tr("AIDE"))
+        set_icon(self.analyse_btn, "search")
+        set_icon(self.clear_btn, "trash")
+        set_icon(self.export_btn, "export")
+        set_icon(self.help_btn, "help")
         self.sources = QComboBox()
         for label, value in SOURCES:
             self.sources.addItem(tr(label), value)

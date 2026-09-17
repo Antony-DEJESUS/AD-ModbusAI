@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from modbusai.i18n import tr
 from modbusai.modbus.codec import DisplayMode, DisplayOptions, Radix
+from modbusai.ui.iconography import set_icon
 from modbusai.ui.metrics import text_width
 from modbusai.ui.widgets.labels import section
 
@@ -35,6 +36,7 @@ class ActionsPanel(QFrame):
 
         self.read_btn = QPushButton(tr("LECTURE"))
         self.read_btn.setProperty("variant", "primary")
+        set_icon(self.read_btn, "play", on_accent=True)
         self.write_btn = QPushButton(tr("ECRITURE"))
         for b in (self.read_btn, self.write_btn):
             b.setMinimumHeight(30)
@@ -46,6 +48,8 @@ class ActionsPanel(QFrame):
         self.cycle_btn.setToolTip(tr("Période du cycle (ms)"))
         self.stop_cycle_btn = QPushButton(tr("ARRET CYCLE"))
         self.stop_cycle_btn.setEnabled(False)
+        set_icon(self.write_btn, "write")
+        set_icon(self.stop_cycle_btn, "stop")
         self.cycle_period_ms = 1000
         self.cycle_btn.setText(tr("Période : {p0} ms").format(p0=self.cycle_period_ms))
 

@@ -200,6 +200,8 @@ def build_qss(tokens: Tokens | None = None, arrows: dict[str, str] | None = None
     QLabel[variant="section"] {{ color: {t.muted}; font-weight: 700; font-size: 9pt; letter-spacing: 0.6px; }}
     QLabel#appName {{ font-size: 12pt; font-weight: 800; letter-spacing: 0.3px; }}
     QLabel#appTag {{ color: {t.muted}; font-size: 8pt; letter-spacing: 1.2px; }}
+    QPlainTextEdit#logConsole, QLabel#logColumns {{ font-family: {mono_font_family()}; }}
+    QLabel#logColumns {{ color: {t.muted}; }}
     QLabel#credit {{ color: {t.muted}; }}
     QLabel#credit:hover {{ color: {t.accent}; }}
     QFrame#topBar {{ background: {t.card}; border: 1px solid {t.border}; border-radius: {cr}px; }}

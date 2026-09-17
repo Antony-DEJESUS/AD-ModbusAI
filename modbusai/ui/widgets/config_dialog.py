@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from modbusai.i18n import tr
 from modbusai.transport.ports import list_serial_ports
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
+from modbusai.ui.iconography import set_icon
 from modbusai.ui.metrics import line_height
 from modbusai.ui.network_tools import PingWorker, network_connections_available, open_network_connections
 
@@ -41,6 +42,7 @@ class SerialForm(QWidget):
         self.port.setEditable(True)  # permet de saisir un COM non détecté
         refresh = QPushButton(tr("ACTUALISER"))  # libellé plutôt qu'un glyphe : toutes les polices ne l'ont pas
         refresh.setToolTip(tr("Rafraîchir la liste des ports"))
+        set_icon(refresh, "refresh")
         refresh.clicked.connect(self._refresh_ports)
         port_row = QHBoxLayout()
         port_row.setContentsMargins(0, 0, 0, 0)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import enum
 import time
+from datetime import datetime
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import QColor
@@ -28,11 +29,12 @@ from modbusai.modbus.codec import Radix, format_int, parse_int
 from modbusai.modbus.slave import TABLE_SIZE, DataStore, HandledRequest, SlaveConfig, Table
 from modbusai.transport.netinfo import is_wildcard, local_ipv4_addresses
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
+from modbusai.ui.iconography import set_icon
 from modbusai.ui.metrics import text_width, use_tabular_figures
 from modbusai.ui.palette import State, color
 from modbusai.ui.style import PAGE_MARGINS
 from modbusai.ui.widgets.labels import section
-from modbusai.ui.widgets.log_console import LogPanel
+from modbusai.ui.widgets.log_console import SLAVE_COLUMNS, LogPanel
 from modbusai.ui.widgets.stat_tiles import StatTiles
 
 COLUMNS = 10
@@ -206,9 +208,15 @@ class Led(QLabel):
     def __init__(self, text: str, state: State, parent: QWidget | None = None) -> None:
         super().__init__(text, parent)
         self._color = color(state)
+        self._state = state
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._off)
+        self._off()
+
+    def set_state(self, state: State) -> None:
+        self._state = state
+        self._color = color(state)
         self._off()
 
     def blink(self, ms: int = 150) -> None:
@@ -290,6 +298,9 @@ class SlavePage(QWidget):
         self.start_btn.setProperty("variant", "primary")
         self.stop_btn = QPushButton(tr("ARRÊTER"))
         self.stop_btn.setEnabled(False)
+        set_icon(self.link_btn, "settings")
+        set_icon(self.start_btn, "play", on_accent=True)
+        set_icon(self.stop_btn, "stop")
         self.rx_led = Led(tr("RX"), State.OK)
         self.tx_led = Led(tr("TX"), State.ERROR)
         self.tiles = StatTiles(
@@ -356,6 +367,7 @@ class SlavePage(QWidget):
         self.fill_value.setRange(0, 65535)
         self.fill_btn = QPushButton(tr("REMPLIR la plage visible"))
         self.zero_btn = QPushButton(tr("RAZ table"))
+        set_icon(self.zero_btn, "trash")
         self.animation = QComboBox()
         self.animation.addItem(tr("Aucune animation"), "none")
         self.animation.addItem(tr("Incrémenter la plage visible"), "inc")
@@ -391,7 +403,7 @@ class SlavePage(QWidget):
         self.view.setAlternatingRowColors(False)
         use_tabular_figures(self.view)
 
-        self.log_panel = LogPanel()
+        self.log_panel = LogPanel(SLAVE_COLUMNS)
         self.log_enabled = QCheckBox(tr("Journaliser les requêtes"))
         self.log_enabled.setChecked(True)
         log_head = QHBoxLayout()
@@ -591,6 +603,13 @@ class SlavePage(QWidget):
     def serving(self) -> bool:
         return self._serving
 
+    def repaint_state_colors(self) -> None:
+        """Après un changement de thème : voyants et tuiles reprennent les
+        nuances du thème courant (elles sont posées en code, pas en QSS)."""
+        for led, state in ((self.rx_led, State.OK), (self.tx_led, State.ERROR)):
+            led.set_state(state)
+        self.tiles.repaint()
+
     # ====================================================== maîtres connectés
     def on_clients(self, clients: tuple[str, ...]) -> None:
         """Liste des maîtres connectés (Modbus TCP). En RTU, le maître n'est pas
@@ -637,19 +656,21 @@ class SlavePage(QWidget):
         )
         if not self.log_enabled.isChecked():
             return
-        console = self.log_panel.console
-        req = result.request.hex(" ").upper()
-        resp = result.response.hex(" ").upper() if result.response is not None else "-"
-        who = f"Esc {result.slave_id}" if result.slave_id is not None else "?"
-        fc = f"FC{result.function:02X}" if result.function is not None else ""
-        origin = f"{client:<21} " if client else ""
-        line = f"{origin}{who:<8}{fc:<6} RX {req}  TX {resp}  {tr(result.kind)}" + (
-            f" ({result.detail})" if result.detail else ""
+        served = result.kind in ("réponse", "broadcast")
+        self.log_panel.console.log_cells(
+            (
+                datetime.now().strftime("%H:%M:%S.%f")[:-3],
+                client or tr("bus RTU"),
+                "-" if result.slave_id is None else str(result.slave_id),
+                "" if result.function is None else f"{result.function:02X}",
+                tr(result.kind),
+                f"RX {result.request.hex(' ').upper()}  "
+                f"TX {result.response.hex(' ').upper() if result.response is not None else '-'}",
+            ),
+            state=State.OK if served else State.WARN,
+            highlight=4,
+            detail=result.detail,
         )
-        if result.kind in ("réponse", "broadcast"):
-            console.log_info(line)
-        else:
-            console.log_error(line)
 
     def on_store_changed(self) -> None:
         self.model.refresh_if_changed()

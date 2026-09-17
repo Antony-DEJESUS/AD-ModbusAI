@@ -713,4 +713,10 @@ EN: dict[str, str] = {
     "Aucune hypothèse pour l'instant": "No hypothesis yet",
     "Indices retenus par l'hypothèse sélectionnée": "Evidence behind the selected hypothesis",
     "Les tests proposés apparaîtront ici, une fois une hypothèse sélectionnée.": "The suggested tests will appear here once a hypothesis is selected.",
+    "bus RTU": "RTU bus",
+    "Traitement": "Handling",
+    "Trames": "Frames",
+    "Esc": "Slv",
+    "N°": "No.",
+    "ms": "ms",
 }
