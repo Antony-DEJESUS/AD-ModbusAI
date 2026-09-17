@@ -5,6 +5,36 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 1.0.0 - Première version complète
+
+Les trois phases sont livrées et validées sur chantier (TC903 Schneider,
+adaptateur CH340, 19200 8N1). Ce que fait l'outil :
+
+- **Maître** RTU et TCP : lecture / écriture façon Modbus Doctor, cyclique,
+  reconnexion automatique, formats 8 à 64 bits et flottants, valeur, hexa et
+  binaire côte à côte, journal en colonnes.
+- **Espion** : écoute passive du bus RS-485, sans jamais émettre.
+- **Scan réseau** : recherche des esclaves, identification FC43 / FC17,
+  balayage des vitesses et parités.
+- **Diagnostic autonome** : campagnes minutées, test de torture expliqué phase
+  par phase, hypothèses classées avec score et légende, tests pour départager,
+  export texte qui se suffit à lui-même (statistiques, hypothèses, phases,
+  trace de toutes les trames).
+- **Serveur esclave** : simulateur façon Mod_RSsim sur sa propre liaison, donc
+  utilisable en même temps que le maître sur un autre port ; injection de
+  défauts, maîtres connectés, cellules lues ou écrites éclairées en vert.
+- Français / anglais, thème clair / sombre, charte AD (gris chauds et
+  terracotta), exécutable unique sans installateur.
+
+Ajouts de cette version :
+
+- Pastille d'accent sur l'onglet où une activité tourne (campagne, scan, écoute,
+  serveur) : on la voit même en regardant ailleurs.
+- Pendant une campagne ou un scan, ARRÊTER devient l'action saillante.
+- La colonne du diagnostic se dimensionne sur ses boutons, icônes comprises.
+- La version de `pyproject.toml` avait dérivé de celle du paquet sans que rien
+  ne le signale : les deux sont réalignées et un test les tient ensemble.
+
 ## 0.3.5 - Icônes et journal en colonnes
 
 - Jeu d'icônes dessiné à l'exécution (`ui/iconography.py`) : dix-huit tracés sur

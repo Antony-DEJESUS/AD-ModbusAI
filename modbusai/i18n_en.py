@@ -602,8 +602,6 @@ EN: dict[str, str] = {
     "Mode d’emploi": "User guide",
     "Règle de versionnage": "Versioning rule",
     "Numéro X.Y.Z, défini une seule fois dans le code et repris par la barre de titre et le nom de l’exécutable.": "Number X.Y.Z, defined once in the code and reused by the title bar and the executable name.",
-    "changement majeur d’architecture ou de format des données.": "major change of architecture or data format.",
-    "nouvelle phase fonctionnelle (phase 1 = 0.1, phase 2 = 0.2, phase 3 = 0.3).": "new functional phase (phase 1 = 0.1, phase 2 = 0.2, phase 3 = 0.3).",
     "corrections et petites améliorations sans changement de périmètre.": "fixes and small improvements without scope change.",
     "Version installée :": "Installed version:",
     "Bandeau": "Top bar",
@@ -719,4 +717,7 @@ EN: dict[str, str] = {
     "Esc": "Slv",
     "N°": "No.",
     "ms": "ms",
+    "rupture : architecture ou format des données.": "breaking change: architecture or data format.",
+    "nouvelle fonction.": "new feature.",
+    "Les versions 0.1 à 0.3 ont porté les trois phases de développement ; la 1.0.0 est la première version complète, validée sur chantier.": "Versions 0.1 to 0.3 carried the three development phases; 1.0.0 is the first complete version, validated on site.",
 }

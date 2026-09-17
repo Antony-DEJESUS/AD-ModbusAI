@@ -19,10 +19,11 @@ def versioning_html() -> str:
             f"<h3>{tr('Règle de versionnage')}</h3>",
             f"<p>{tr('Numéro X.Y.Z, défini une seule fois dans le code et repris par la barre de titre et le nom de l’exécutable.')}</p>",
             "<ul>",
-            f"<li><b>X</b> : {tr('changement majeur d’architecture ou de format des données.')}</li>",
-            f"<li><b>Y</b> : {tr('nouvelle phase fonctionnelle (phase 1 = 0.1, phase 2 = 0.2, phase 3 = 0.3).')}</li>",
+            f"<li><b>X</b> : {tr('rupture : architecture ou format des données.')}</li>",
+            f"<li><b>Y</b> : {tr('nouvelle fonction.')}</li>",
             f"<li><b>Z</b> : {tr('corrections et petites améliorations sans changement de périmètre.')}</li>",
             "</ul>",
+            f"<p>{tr('Les versions 0.1 à 0.3 ont porté les trois phases de développement ; la 1.0.0 est la première version complète, validée sur chantier.')}</p>",
             f"<p>{tr('Version installée :')} <b>{__version__}</b></p>",
         ]
     )

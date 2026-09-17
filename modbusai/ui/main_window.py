@@ -29,7 +29,7 @@ from modbusai.modbus.slave import DataStore, SlaveConfig
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
 from modbusai.ui.controllers import CampaignController, ScanController, StressController
 from modbusai.ui.iconography import refresh_all as refresh_icons
-from modbusai.ui.iconography import set_tab_icon
+from modbusai.ui.iconography import set_tab_badge, set_tab_icon
 from modbusai.ui.pages.diagnostic_page import DiagnosticPage
 from modbusai.ui.pages.master_page import MasterPage
 from modbusai.ui.pages.scan_page import ScanPage
@@ -565,6 +565,17 @@ class MainWindow(QMainWindow):
             active.append(Occupancy(Role.SLAVE, port_key(self._slave.settings, listen=True)))
         return tuple(active)
 
+    def _tab_is_running(self, tab: Tab, busy: Tab | None) -> bool:
+        """Pastille d'accent sur l'onglet : quelque chose y tourne (campagne,
+        scan, écoute ou serveur), même quand on regarde ailleurs."""
+        if tab is busy:
+            return True
+        if tab is Tab.SNIFFER:
+            return self._sniffer is not None
+        if tab is Tab.SLAVE:
+            return self._slave is not None
+        return False
+
     def _update_availability(self) -> None:
         busy = self._busy_tab() is not None
         active = self._occupancies()
@@ -572,10 +583,19 @@ class MainWindow(QMainWindow):
         # Seule une activité longue verrouille des onglets ; les rôles, eux, se
         # partagent la fenêtre tant qu'ils ne visent pas le même port.
         states = tab_states(self._busy_tab())
+        running = self._busy_tab()
         for tab, idx in self._tab_index.items():
             st = states[tab]
             self.tabs.setTabEnabled(idx, st.enabled)
             self.tabs.setTabToolTip(idx, st.reason)
+            # Pastille d'accent : cet onglet a une activité en cours
+            set_tab_badge(
+                self.tabs,
+                idx,
+                tab is running
+                or (tab is Tab.SLAVE and self._slave is not None)
+                or (tab is Tab.SNIFFER and self._sniffer is not None),
+            )
         self.scan_page.set_tcp(self._is_tcp)
         sniffer_ok, sniffer_reason = can_start(Role.SNIFFER, port_key(self._serial_settings), active)
         if self._is_tcp:

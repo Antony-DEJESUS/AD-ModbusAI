@@ -24,7 +24,7 @@ STROKE = 2.0
 DEFAULT_SIZE = 16
 
 Painter = Callable[[QPainter, QPen], None]
-_registry: list[tuple[weakref.ref, str, str, bool]] = []  # widget, nom, cible, posé sur l'accent
+_registry: list[list] = []  # [widget, nom, cible, posé sur l'accent, pastille]
 _cache: dict[tuple[str, str, int], QIcon] = {}
 
 
@@ -185,15 +185,18 @@ _PAINTERS: dict[str, Painter] = {
 
 
 # -------------------------------------------------------------------- API
-def icon(name: str, on_accent: bool = False, size: int = DEFAULT_SIZE) -> QIcon:
+def icon(name: str, on_accent: bool = False, size: int = DEFAULT_SIZE, badge: bool = False) -> QIcon:
     """Icône du jeu, dans la couleur du texte — ou celle posée sur l'accent,
-    pour un bouton principal dont le fond est terracotta."""
+    pour un bouton principal dont le fond est terracotta.
+
+    ``badge`` ajoute une pastille d'accent en bas à droite : c'est le signe
+    qu'une activité tourne dans cet onglet."""
     painter_fn = _PAINTERS.get(name)
     if painter_fn is None:
         return QIcon()
     tokens = current()
     tint = tokens.on_accent if on_accent else tokens.text
-    key = (name, tint, size)
+    key = (name, tint, size, badge)
     cached = _cache.get(key)
     if cached is not None:
         return cached
@@ -210,6 +213,10 @@ def icon(name: str, on_accent: bool = False, size: int = DEFAULT_SIZE) -> QIcon:
     painter.setPen(pen)
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter_fn(painter, pen)
+    if badge:
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(current().accent))
+        painter.drawEllipse(QPointF(19, 19), 5.0, 5.0)
     painter.end()
     pix.setDevicePixelRatio(ratio)
     result = QIcon(pix)
@@ -222,27 +229,40 @@ def set_icon(widget: QWidget, name: str, on_accent: bool = False, size: int = DE
     widget.setIcon(icon(name, on_accent, size))
     if hasattr(widget, "setIconSize"):
         widget.setIconSize(QSize(size, size))
-    _registry.append((weakref.ref(widget), name, "icon", on_accent))
+    _registry.append([weakref.ref(widget), name, "icon", on_accent, False])
 
 
 def set_tab_icon(tabs: QWidget, index: int, name: str, size: int = DEFAULT_SIZE) -> None:
     tabs.setTabIcon(index, icon(name, False, size))
     tabs.setIconSize(QSize(size, size))
-    _registry.append((weakref.ref(tabs), name, f"tab:{index}", False))
+    _registry.append([weakref.ref(tabs), name, f"tab:{index}", False, False])
+
+
+def set_tab_badge(tabs: QWidget, index: int, active: bool) -> None:
+    """Pastille d'accent sur l'icône d'un onglet : une activité y tourne."""
+    target = f"tab:{index}"
+    for entry in _registry:
+        if entry[0]() is tabs and entry[2] == target:
+            if entry[4] == active:
+                return
+            entry[4] = active
+            tabs.setTabIcon(index, icon(entry[1], False, DEFAULT_SIZE, active))
+            return
 
 
 def refresh_all() -> None:
     """Repeint toutes les icônes posées : appelée après un changement de thème."""
     _cache.clear()
-    alive: list[tuple[weakref.ref, str, str, bool]] = []
-    for ref, name, target, on_accent in _registry:
+    alive: list[list] = []
+    for entry in _registry:
+        ref, name, target, on_accent, badge = entry
         widget = ref()
         if widget is None:
             continue
-        alive.append((ref, name, target, on_accent))
+        alive.append(entry)
         try:
             if target.startswith("tab:"):
-                widget.setTabIcon(int(target[4:]), icon(name))
+                widget.setTabIcon(int(target[4:]), icon(name, False, DEFAULT_SIZE, badge))
             else:
                 widget.setIcon(icon(name, on_accent))
         except RuntimeError:  # widget Qt déjà détruit

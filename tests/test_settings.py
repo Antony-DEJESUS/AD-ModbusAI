@@ -20,3 +20,20 @@ def test_t35_and_gap():
 
 def test_summary():
     assert SerialSettings("COM4", parity=Parity.EVEN, stopbits=2).summary() == "COM4 : 19200,8,Even,Two"
+
+
+def test_version_is_declared_once():
+    """pyproject et le paquet doivent annoncer la même version.
+
+    Elles ont dérivé sans que rien ne s'en aperçoive : seule la version du
+    paquet est lue par l'application, celle de pyproject était restée en
+    arrière. Un test vaut mieux qu'une consigne.
+    """
+    import re
+    from pathlib import Path
+
+    from modbusai import __version__
+
+    pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
+    declared = re.search(r'^version = "([^"]+)"', pyproject, flags=re.M)
+    assert declared is not None and declared.group(1) == __version__

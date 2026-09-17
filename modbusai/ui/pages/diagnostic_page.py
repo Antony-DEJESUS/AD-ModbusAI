@@ -67,7 +67,7 @@ from modbusai.ui.iconography import set_icon
 from modbusai.ui.metrics import line_height, text_width, use_tabular_figures
 from modbusai.ui.palette import State, color
 from modbusai.ui.style import PAGE_MARGINS
-from modbusai.ui.widgets.labels import section
+from modbusai.ui.widgets.labels import section, set_variant
 from modbusai.ui.widgets.request_bar import RegisterType
 
 # Par défaut on écarte le scan (ses adresses absentes ne sont pas des pannes à
@@ -444,6 +444,7 @@ class DiagnosticPage(QWidget):
     # ============================================================ campagnes
     def on_campaign_started(self, spec: CampaignSpec) -> None:
         self._running = True
+        self._mark_running(True)
         self.cancel_btn.setEnabled(True)
         self.run_btn.setEnabled(False)
         self.stress_btn.setEnabled(False)
@@ -479,6 +480,7 @@ class DiagnosticPage(QWidget):
 
     def on_campaign_finished(self, stats: SlaveStats | None) -> None:
         self._running = False
+        self._mark_running(False)
         self.cancel_btn.setEnabled(False)
         self.set_can_run_tests(self._can_run)
         if stats is None:
@@ -503,6 +505,7 @@ class DiagnosticPage(QWidget):
 
     def on_stress_finished(self, report: StressReport | None) -> None:
         self._running = False
+        self._mark_running(False)
         self.cancel_btn.setEnabled(False)
         self.set_can_run_tests(self._can_run)
         self._stress_report = report
@@ -520,6 +523,23 @@ class DiagnosticPage(QWidget):
             self.results.appendPlainText(f"   ⇒ {report.orientation}")
         self.countdown.setText(tr("Terminé."))
         self.refresh()
+
+    def showEvent(self, event) -> None:  # noqa: N802 (API Qt)
+        super().showEvent(event)
+        self._fit_target_box()
+
+    def _fit_target_box(self) -> None:
+        """La colonne de gauche doit contenir ses deux boutons côte à côte, icône
+        comprise : on la mesure une fois la feuille de style appliquée."""
+        needed = self.run_btn.sizeHint().width() + self.stress_btn.sizeHint().width() + 40
+        if self.target_box.minimumWidth() < needed:
+            self.target_box.setMinimumWidth(needed)
+        if self.target_box.maximumWidth() < needed + 60:
+            self.target_box.setMaximumWidth(needed + 60)
+
+    def _mark_running(self, running: bool) -> None:
+        """Pendant une campagne, ARRÊTER devient l'action saillante."""
+        set_variant(self.cancel_btn, "danger" if running else "")
 
     # ============================================================= analyse
     def refresh(self) -> None:

@@ -19,6 +19,8 @@ Au premier démarrage (et à la première ouverture de chaque version), la pop-u
 Habillage : charte AD (gris chauds et terracotta), thème sombre et
 thème clair, définie une seule fois dans `modbusai/ui/palette.py`.
 
+Version 1.0.0 : les trois phases sont livrées et validées sur chantier.
+
 Version : barre de titre et pop-up À propos (`modbusai/__init__.py`), historique dans `CHANGELOG.md`.
 
 ## Lancer depuis les sources

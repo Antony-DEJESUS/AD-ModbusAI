@@ -91,6 +91,8 @@ def build_qss(tokens: Tokens | None = None, arrows: dict[str, str] | None = None
     QPushButton[variant="primary"]:disabled {{
         background: {t.window}; color: {t.muted}; border-color: {t.border};
     }}
+    QPushButton[variant="danger"] {{ color: {t.error}; border-color: {t.error}; }}
+    QPushButton[variant="danger"]:hover {{ background: {t.hover}; border-color: {t.error}; }}
     QPushButton[variant="quiet"] {{ background: transparent; border-color: transparent; color: {t.muted}; }}
     QPushButton[variant="quiet"]:hover {{ background: {t.hover}; color: {t.text}; }}
 

@@ -200,8 +200,11 @@ docs/                          propositions, plan et compte rendu de phase
 - Textes : tout libellé visible passe par `tr()` et a son entrée dans
   `i18n_en.py`. Les énumérations gardent leur valeur française et sont
   traduites au point d'affichage (`tr(e.value)`).
-- Version : modifier uniquement `__version__` dans `modbusai/__init__.py` et
-  ajouter une entrée dans `CHANGELOG.md`. Phase N = 0.N.x.
+- Version : modifier `__version__` dans `modbusai/__init__.py` **et** `version`
+  dans `pyproject.toml` (un test vérifie qu'ils s'accordent), puis ajouter une
+  entrée dans `CHANGELOG.md`. Les phases 1 à 3 ont porté les versions 0.1 à
+  0.3 ; depuis la 1.0.0 : X = rupture (architecture ou format des données),
+  Y = nouvelle fonction, Z = correction.
 - Lint : `ruff check .` (config dans `pyproject.toml`, ligne 120).
 
 ## Commandes

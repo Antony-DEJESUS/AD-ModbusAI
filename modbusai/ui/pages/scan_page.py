@@ -37,6 +37,7 @@ from modbusai.ui.metrics import text_width, use_tabular_figures
 from modbusai.ui.palette import State, color
 from modbusai.ui.style import PAGE_MARGINS
 from modbusai.ui.widgets.config_dialog import BAUDRATES
+from modbusai.ui.widgets.labels import set_variant
 
 _STATUS_STATE = {
     ScanStatus.PRESENT: State.OK,
@@ -303,6 +304,7 @@ class ScanPage(QWidget):
     # ================================================================ état
     def on_started(self, plan: ScanPlan) -> None:
         self._running = True
+        set_variant(self.cancel_btn, "danger")  # pendant le scan, ARRÊTER est l'action saillante
         self.start_btn.setEnabled(False)
         self.cancel_btn.setEnabled(True)
         self.progress.setRange(0, plan.total_probes)
@@ -326,6 +328,7 @@ class ScanPage(QWidget):
 
     def on_finished(self, ok: bool) -> None:
         self._running = False
+        set_variant(self.cancel_btn, "")
         self.start_btn.setEnabled(True)
         self.cancel_btn.setEnabled(False)
         self.progress_label.setText("Scan terminé." if ok else "Scan interrompu.")
