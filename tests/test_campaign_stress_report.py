@@ -116,7 +116,7 @@ def test_report_text():
     # chaque phase est explicitée : but, réglages, chiffres, lecture
     assert "Phase 1/4 : Référence" in text and "But      :" in text and "Lecture  :" in text
     assert "[défauts provoqués]" in text  # trames longues et timeout serré
-    assert suggested_filename().startswith("ModbusAI_diagnostic_") and suggested_filename().endswith(".txt")
+    assert suggested_filename().startswith("AD-ModbusAI_diagnostic_") and suggested_filename().endswith(".txt")
 
 
 def test_report_traces_every_frame():

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import enum
+import time
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QTimer, Signal
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSettings, Qt, QTimer, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -25,11 +27,13 @@ from modbusai.i18n import tr
 from modbusai.modbus.codec import Radix, format_int, parse_int
 from modbusai.modbus.slave import TABLE_SIZE, DataStore, HandledRequest, SlaveConfig, Table
 from modbusai.transport.netinfo import is_wildcard, local_ipv4_addresses
-from modbusai.transport.records import LinkSettings, TcpSettings
+from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
 from modbusai.ui.palette import State, color
+from modbusai.ui.style import PAGE_MARGINS
 from modbusai.ui.widgets.log_console import LogPanel
 
 COLUMNS = 10
+FLASH_S = 2.0  # durée de l'éclairage vert d'une cellule lue ou écrite
 
 
 def listen_description(settings: LinkSettings) -> str:
@@ -75,6 +79,46 @@ class RegisterTableModel(QAbstractTableModel):
         self.rows = 100
         self.fmt = CellFormat.DEC_SIGNED
         self._seen_version = -1
+        self._touched: dict[tuple[Table, int], float] = {}  # (table, adresse) -> instant de fin d'animation
+
+    # ------------------------------------------------------- animation
+    def touch(self, table: Table, address: int, count: int) -> None:
+        """Marque une zone lue ou écrite par un maître : elle s'éclaire en vert
+        puis s'éteint progressivement (voir FLASH_S)."""
+        end = time.monotonic() + FLASH_S
+        for addr in range(address, min(address + count, TABLE_SIZE)):
+            self._touched[(table, addr)] = end
+
+    def flashing(self) -> bool:
+        return bool(self._touched)
+
+    def tick_flashes(self) -> None:
+        """Rafraîchit les lignes animées et oublie celles qui sont éteintes."""
+        now = time.monotonic()
+        expired = [key for key, end in self._touched.items() if end <= now]
+        for key in expired:
+            del self._touched[key]
+        rows = {
+            (addr - self.start) // COLUMNS
+            for (table, addr) in list(self._touched) + expired
+            if table is self.table and self.start <= addr < self.start + self.rows * COLUMNS
+        }
+        for row in rows:
+            if 0 <= row < self.rowCount():
+                self.dataChanged.emit(
+                    self.index(row, 0), self.index(row, COLUMNS - 1), [Qt.ItemDataRole.BackgroundRole]
+                )
+
+    def _flash_color(self, table: Table, address: int) -> QColor | None:
+        end = self._touched.get((table, address))
+        if end is None:
+            return None
+        remaining = end - time.monotonic()
+        if remaining <= 0:
+            return None
+        tint = QColor(color(State.OK))
+        tint.setAlphaF(min(1.0, 0.14 + 0.46 * (remaining / FLASH_S)))  # s'estompe en douceur
+        return tint
 
     # ------------------------------------------------------------- config
     def configure(self, table: Table, start: int, rows: int, fmt: CellFormat) -> None:
@@ -119,6 +163,8 @@ class RegisterTableModel(QAbstractTableModel):
             return format_int(value, 16, self.fmt.radix, self.fmt.signed)
         if role == Qt.ItemDataRole.TextAlignmentRole:
             return int(Qt.AlignmentFlag.AlignCenter)
+        if role == Qt.ItemDataRole.BackgroundRole:
+            return self._flash_color(self.table, addr)
         return None
 
     def setData(self, index: QModelIndex, value, role: int = Qt.ItemDataRole.EditRole) -> bool:
@@ -195,9 +241,10 @@ def parse_slave_ids(text: str) -> set[int]:
 
 
 class SlavePage(QWidget):
-    start_requested = Signal(object)  # SlaveConfig
+    start_requested = Signal(object, object)  # SlaveConfig, LinkSettings
     stop_requested = Signal()
     status_message = Signal(str)
+    link_changed = Signal()  # la liaison du serveur a changé : la fenêtre réarbitre les ports
 
     def __init__(self, store: DataStore, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -206,6 +253,18 @@ class SlavePage(QWidget):
         self._tcp = False
         self._clients: tuple[str, ...] = ()
         self.model = RegisterTableModel(store, self)
+        # Liaison propre au serveur : il peut tourner en même temps que le maître,
+        # sur un autre port (deux adaptateurs, ou un câble croisé entre deux COM).
+        self._serial, self._tcp_settings, self._protocol = self._load_link()
+
+        self.link_protocol = QComboBox()
+        self.link_protocol.addItems(["RTU", "TCP"])
+        self.link_protocol.setCurrentText(self._protocol)
+        self.link_protocol.setToolTip(tr("Protocole servi par le serveur esclave"))
+        self.link_btn = QPushButton(tr("LIAISON"))
+        self.link_btn.setToolTip(tr("Port et paramètres du serveur esclave, indépendants de ceux du maître"))
+        self.link_summary = QLabel()
+        self.link_summary.setProperty("variant", "muted")
 
         # ---------------------------------------------------------- serveur
         self.slave_ids = QLineEdit("1")
@@ -245,6 +304,10 @@ class SlavePage(QWidget):
             server_row.addWidget(QLabel(label))
             server_row.addWidget(w)
         server_row.addWidget(self.read_only)
+        server_row.addSpacing(12)
+        server_row.addWidget(self.link_protocol)
+        server_row.addWidget(self.link_btn)
+        server_row.addWidget(self.link_summary)
         server_row.addSpacing(12)
         server_row.addWidget(self.start_btn)
         server_row.addWidget(self.stop_btn)
@@ -333,7 +396,7 @@ class SlavePage(QWidget):
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(*PAGE_MARGINS)
         layout.addLayout(server_row)
         layout.addLayout(status_row)
         layout.addWidget(sep)
@@ -355,12 +418,22 @@ class SlavePage(QWidget):
             lambda n: self.status_message.emit(tr("Journal esclave copié ({p0} lignes)").format(p0=n))
         )
 
+        self.link_btn.clicked.connect(self._configure_link)
+        self.link_protocol.currentTextChanged.connect(self._on_protocol_changed)
+        self._flash_timer = QTimer(self)
+        self._flash_timer.timeout.connect(self._tick_flashes)
         self._refresh_timer = QTimer(self)
         self._refresh_timer.timeout.connect(self.model.refresh_if_changed)
         self._refresh_timer.start(300)
         self._anim_timer = QTimer(self)
         self._anim_timer.timeout.connect(self._animate)
         self._reconfigure()
+        self._show_link()
+
+    def _tick_flashes(self) -> None:
+        self.model.tick_flashes()
+        if not self.model.flashing():
+            self._flash_timer.stop()
 
     # ============================================================== config
     def config(self) -> SlaveConfig:
@@ -379,16 +452,79 @@ class SlavePage(QWidget):
             self.status_message.emit(str(exc))
             self.log_panel.console.log_error(str(exc))
             return
-        self.start_requested.emit(cfg)
+        self.start_requested.emit(cfg, self.link_settings())
+
+    # ============================================================== liaison
+    def _on_protocol_changed(self, name: str) -> None:
+        self._protocol = name if name in ("RTU", "TCP") else "RTU"
+        self._save_link()
+        self._show_link()
+        self.link_changed.emit()
+
+    def link_settings(self) -> LinkSettings:
+        return self._tcp_settings if self._protocol == "TCP" else self._serial
+
+    def _configure_link(self) -> None:
+        from modbusai.ui.widgets.config_dialog import ConfigDialog
+
+        dialog = ConfigDialog(self._protocol, self._serial, self._tcp_settings, self)
+        dialog.setWindowTitle(tr("Liaison du serveur esclave"))
+        if dialog.exec():
+            self._serial = dialog.serial_settings()
+            self._tcp_settings = dialog.tcp_settings()
+            self._save_link()
+            self._show_link()
+            self.link_changed.emit()
+
+    def _show_link(self) -> None:
+        settings = self.link_settings()
+        if isinstance(settings, TcpSettings):
+            text = tr("TCP, port {p0}").format(p0=settings.port)
+        else:
+            text = settings.summary() if settings.port else tr("port à choisir")
+        self.link_summary.setText(text)
+
+    def _load_link(self) -> tuple[SerialSettings, TcpSettings, str]:
+        qs = QSettings()
+        serial = SerialSettings(
+            port=str(qs.value("slave/port", "")),
+            baudrate=int(qs.value("slave/baudrate", 19200)),
+            bytesize=int(qs.value("slave/bytesize", 8)),
+            parity=Parity(str(qs.value("slave/parity", "N"))),
+            stopbits=float(qs.value("slave/stopbits", 1.0)),
+        )
+        tcp = TcpSettings(host=str(qs.value("slave/host", "")), port=int(qs.value("slave/tcp_port", 502)))
+        protocol = str(qs.value("slave/protocol", "RTU"))
+        return serial, tcp, protocol if protocol in ("RTU", "TCP") else "RTU"
+
+    def _save_link(self) -> None:
+        qs = QSettings()
+        qs.setValue("slave/protocol", self._protocol)
+        qs.setValue("slave/port", self._serial.port)
+        qs.setValue("slave/baudrate", self._serial.baudrate)
+        qs.setValue("slave/bytesize", self._serial.bytesize)
+        qs.setValue("slave/parity", str(self._serial.parity.value))
+        qs.setValue("slave/stopbits", self._serial.stopbits)
+        qs.setValue("slave/host", self._tcp_settings.host)
+        qs.setValue("slave/tcp_port", self._tcp_settings.port)
 
     def on_started(self, settings: LinkSettings) -> None:
         self._serving = True
         self._tcp = isinstance(settings, TcpSettings)
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
-        for w in (self.slave_ids, self.delay, self.drop, self.corrupt, self.read_only):
+        for w in (
+            self.slave_ids,
+            self.delay,
+            self.drop,
+            self.corrupt,
+            self.read_only,
+            self.link_btn,
+            self.link_protocol,
+        ):
             w.setEnabled(False)
         where = listen_description(settings)
+        self._show_link()
         self.counters_label.setText(tr("Serveur actif"))
         self.link_label.setText(tr("Écoute : {p0}").format(p0=where))
         self.on_clients(())
@@ -403,7 +539,15 @@ class SlavePage(QWidget):
         self._serving = False
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
-        for w in (self.slave_ids, self.delay, self.drop, self.corrupt, self.read_only):
+        for w in (
+            self.slave_ids,
+            self.delay,
+            self.drop,
+            self.corrupt,
+            self.read_only,
+            self.link_btn,
+            self.link_protocol,
+        ):
             w.setEnabled(True)
         self.counters_label.setText(tr("Serveur arrêté"))
         self.link_label.setText(tr("Serveur arrêté"))
@@ -411,8 +555,21 @@ class SlavePage(QWidget):
         self._clients = ()
         self.log_panel.console.log_info(tr("Serveur esclave arrêté"))
 
-    def set_available(self, available: bool) -> None:
+    def _link_widgets(self) -> tuple[QWidget, ...]:
+        """Réglages figés pendant que le serveur tourne."""
+        return (
+            self.slave_ids,
+            self.delay,
+            self.drop,
+            self.corrupt,
+            self.read_only,
+            self.link_btn,
+            self.link_protocol,
+        )
+
+    def set_available(self, available: bool, reason: str = "") -> None:
         self.start_btn.setEnabled(available and not self._serving)
+        self.start_btn.setToolTip("" if available else reason)
 
     @property
     def serving(self) -> bool:
@@ -444,6 +601,11 @@ class SlavePage(QWidget):
     # ============================================================= trafic
     def on_handled(self, result: HandledRequest, counters, client: str = "") -> None:
         self.rx_led.blink()
+        if result.access is not None:
+            # Ce que le maître vient de lire ou d'écrire s'éclaire en vert
+            self.model.touch(result.access.table, result.access.address, result.access.count)
+            if not self._flash_timer.isActive():
+                self._flash_timer.start(80)
         if result.response is not None:
             self.tx_led.blink()
         self.counters_label.setText(

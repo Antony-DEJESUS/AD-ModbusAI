@@ -3,7 +3,7 @@
 
 Depuis la racine du dépôt :
     pyinstaller packaging/modbusai.spec
-Résultat : dist/ModbusAI_v<version>.exe (Windows), avec le logo AD Automation en icône.
+Résultat : dist/AD-ModbusAI_v<version>.exe (Windows), avec le logo AD en icône.
 """
 
 import re
@@ -37,7 +37,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name=f"ModbusAI_v{VERSION}",
+    name=f"AD-ModbusAI_v{VERSION}",
     debug=False,
     strip=False,
     upx=False,

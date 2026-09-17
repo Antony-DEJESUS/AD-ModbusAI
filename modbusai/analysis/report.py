@@ -200,5 +200,5 @@ def build_report(
     return "\n".join(lines) + "\n"
 
 
-def suggested_filename(prefix: str = "ModbusAI_diagnostic") -> str:
+def suggested_filename(prefix: str = "AD-ModbusAI_diagnostic") -> str:
     return f"{prefix}_{datetime.now():%Y%m%d_%H%M}.txt"

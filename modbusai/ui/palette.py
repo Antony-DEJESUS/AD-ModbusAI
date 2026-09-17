@@ -1,4 +1,4 @@
-"""Charte graphique AD Automation : gris foncé et terracotta.
+"""Charte graphique AD : gris foncé et terracotta.
 
 Source unique des couleurs de l'interface. La palette Qt (``ui/theme.py``), la
 feuille de style (``ui/style.py``) et les couleurs d'état des pages en sortent :
@@ -62,24 +62,24 @@ class Tokens:
 
 DARK = Tokens(
     name="sombre",
-    window="#232221",
-    surface="#1B1A19",
-    surface_alt="#201F1E",
-    card="#292827",
-    elevated="#2F2E2B",
-    hover="#37352F",
-    border="#3B3936",
-    border_strong="#4E4B46",
-    text="#ECE7E0",
-    muted="#9B938A",
+    window="#2E2C2A",
+    surface="#262523",
+    surface_alt="#2A2927",
+    card="#35332F",
+    elevated="#3A3733",
+    hover="#413E39",
+    border="#48453F",
+    border_strong="#5C584F",
+    text="#EFEAE3",
+    muted="#A79E94",
     accent="#D97757",
     accent_hover="#E68C6E",
     accent_pressed="#C2603E",
-    accent_soft="#38281F",
+    accent_soft="#4A362C",
     on_accent="#201E1C",
     ok="#5FBF8B",
     warn="#E0A83E",
-    error="#F0665E",
+    error="#F2726A",
     special="#B892F0",
 )
 

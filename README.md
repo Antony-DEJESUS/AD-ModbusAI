@@ -1,8 +1,9 @@
-# ModbusAI
+# AD - ModbusAI
 
 Outil de diagnostic Modbus RTU / RS-485 et Modbus TCP pour le chantier (GTB,
 industriel), en français ou en anglais. Cinq onglets, un seul port à la fois :
-passer en espion ou en serveur esclave ferme la liaison maître automatiquement.
+un port ne sert qu'à un rôle à la fois, mais maître et serveur esclave peuvent
+tourner en parallèle sur deux ports différents.
 
 | Onglet | Rôle |
 |---|---|
@@ -10,9 +11,9 @@ passer en espion ou en serveur esclave ferme la liaison maître automatiquement.
 | ESPION | écoute passive du bus RS-485 (aucune émission) : requêtes, réponses, temps, trames brutes, stats par esclave |
 | SCAN RÉSEAU | recherche des esclaves présents, identification FC43 / FC17, liaison au choix ou balayage des vitesses et parités |
 | DIAGNOSTIC | campagnes minutées, test de torture expliqué phase par phase, statistiques, hypothèses classées avec légende et aide, tests pour départager, export txt avec toutes les trames |
-| SERVEUR ESCLAVE | simulateur d'esclave façon Mod_RSsim (RTU ou TCP) avec injection de défauts, adresse d'écoute et maîtres connectés |
+| SERVEUR ESCLAVE | simulateur d'esclave façon Mod_RSsim (RTU ou TCP) sur sa propre liaison, injection de défauts, maîtres connectés, cellules lues ou écrites éclairées en vert |
 
-Habillage : charte AD Automation (gris chauds et terracotta), thème sombre et
+Habillage : charte AD (gris chauds et terracotta), thème sombre et
 thème clair, définie une seule fois dans `modbusai/ui/palette.py`.
 
 Version : barre de titre et pop-up À propos (`modbusai/__init__.py`), historique dans `CHANGELOG.md`.
@@ -32,8 +33,8 @@ py -m venv .venv
 .venv\Scripts\pyinstaller packaging\modbusai.spec
 ```
 
-Résultat : `dist\ModbusAI_v<version>.exe`, sans installateur, avec le logo AD
-Automation en icône.
+Résultat : `dist\AD-ModbusAI_v<version>.exe`, sans installateur, avec le logo AD
+en icône.
 
 ## Tests
 

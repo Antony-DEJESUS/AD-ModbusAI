@@ -1,4 +1,4 @@
-"""Pop-up À propos : logo AD Automation, version, règle de versionnage,
+"""Pop-up À propos : logo, version, règle de versionnage,
 historique des versions (CHANGELOG) et mode d'emploi."""
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ from modbusai.i18n import tr
 from modbusai.ui.resources import changelog_text, logo_pixmap
 
 AUTHOR = "Antony DE JESUS"
-COMPANY = "AD Automation"
 
 
 def versioning_html() -> str:
@@ -113,7 +112,7 @@ class AboutDialog(QDialog):
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title = QLabel(f"<b style='font-size:16pt'>{APP_TITLE}</b>")
         subtitle = QLabel(tr("Outil de diagnostic Modbus RTU / RS-485 et TCP"))
-        credit = QLabel(tr("Fait avec Claude Code par {p0} - {p1}").format(p0=AUTHOR, p1=COMPANY))
+        credit = QLabel(tr("Fait avec CC par {p0}").format(p0=AUTHOR))
         header_text = QVBoxLayout()
         header_text.addWidget(title)
         header_text.addWidget(subtitle)

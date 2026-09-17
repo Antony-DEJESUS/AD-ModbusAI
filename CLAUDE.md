@@ -1,11 +1,11 @@
-# ModbusAI - guide du projet
+# AD - ModbusAI - guide du projet
 
 Outil de diagnostic Modbus RTU / RS-485 et Modbus TCP (Python 3.11+, Windows
 cible, PySide6, pyserial). Phase 1 : page lecture / écriture façon Modbus
 Doctor. Phase 2 : onglets Espion, Scan réseau, Diagnostic, Serveur esclave,
 thème clair / sombre, 64 bits. Phase 3 : Modbus TCP, diagnostic autonome avec
 campagnes minutées et test de torture, export txt, blocages entre onglets,
-français / anglais, habillage et logo AD Automation. Le projet repose sur la
+français / anglais, charte graphique AD. Le projet repose sur la
 séparation en couches ci-dessous : ne pas la contourner.
 
 ## Arborescence
@@ -46,7 +46,7 @@ modbusai/analysis/             couche 2 bis : exploitation des enregistrements, 
     session.py                 SessionStore : historique des observations
 modbusai/ui/                   couche 3 : Qt uniquement
     main_window.py             bandeau, thème, langue, onglets, arbitrage du port, campagnes / torture
-    roles.py                   Role, Tab, tab_states() : table pure des blocages entre onglets
+    roles.py                   Role, Tab, port_key(), Occupancy, can_start(), tab_states() : arbitrage des ports
     workers.py                 ModbusWorker (maître RTU/TCP), SnifferWorker, SlaveWorker, TcpSlaveWorker
     controllers.py             ScanController, CampaignController (durée), StressController (phases)
     palette.py                 charte AD : jetons de couleur des deux thèmes, couleurs d'état (State)
@@ -59,7 +59,7 @@ modbusai/ui/                   couche 3 : Qt uniquement
     pages/                     master_page, sniffer_page, scan_page, diagnostic_page, slave_page
     widgets/                   connection_bar, request_bar, actions_panel, register_grid, exchange_panel,
                                log_console, config_dialog (volets série / TCP), about_dialog
-assets/                        logo AD Automation (PDF source, SVG, PNG noir et blanc), icône .ico
+assets/                        logo A (PNG noir et blanc), icône .ico ; source/ = artwork d'origine, non embarqué
 tests/                         pytest ; fake_slave.py (esclave sur pty), virtual_bus.py (bus RS-485 virtuel)
 packaging/modbusai.spec        PyInstaller, exécutable unique ModbusAI_v<version>, ressources embarquées
 docs/                          propositions, plan et compte rendu de phase
@@ -80,14 +80,18 @@ docs/                          propositions, plan et compte rendu de phase
   vient de `i18n_en.EN` (une clé absente retombe sur le français). Les
   gabarits dynamiques utilisent `tr("... {p0} ...").format(p0=...)`. Le test
   `test_i18n` échoue si une clé du code n'a pas sa traduction.
-- Un seul rôle occupe le port à la fois (`ui/roles.py`). Le worker maître sert
-  les onglets Maître, Scan et Diagnostic (qui ouvre la liaison lui-même si
-  besoin) ; l'espion et le serveur esclave ont leur propre QThread. Les
-  blocages entre onglets viennent de `tab_states()`, table pure et testée.
-  Un rôle actif (espion, serveur) ou une activité longue verrouille les autres
-  onglets ; un maître seulement connecté ne verrouille rien : démarrer l'espion
-  ou le serveur ferme la liaison maître (`_release_master_then`) et n'ouvre le
-  port qu'une fois la fermeture confirmée.
+- **Un port, un rôle** (`ui/roles.py`) : l'arbitrage porte sur la ressource, pas
+  sur le rôle. `port_key(settings, listen=)` donne la clé (port série, ou point
+  TCP distingué entre connexion et écoute) ; `can_start(role, port, active)`
+  refuse en nommant le port et le rôle qui l'occupe. Maître et serveur esclave
+  tournent donc en parallèle sur deux ports différents : le serveur a sa propre
+  liaison (`SlavePage.link_settings()`, réglages `slave/*` dans QSettings). Le
+  worker maître sert les onglets Maître, Scan et Diagnostic ; l'espion et le
+  serveur ont leur propre QThread. `tab_states(busy_tab)` ne verrouille que les
+  onglets qui partagent la liaison maître pendant une activité longue. L'espion
+  utilise la liaison du bandeau : s'il vise le port du maître, la fenêtre ferme
+  cette liaison d'abord (`_release_master_then`) et n'ouvre le port qu'une fois
+  la fermeture confirmée.
 
 ## Concepts clés
 
@@ -142,6 +146,9 @@ docs/                          propositions, plan et compte rendu de phase
   (fond, surfaces, cartes, bordures, texte, accent, états). `ui/theme.py` en
   fait une `QPalette`, `ui/style.py` la feuille de style, `ui/icons.py` les
   indicateurs (chevrons, coche) que la feuille de style empêche Qt de dessiner.
+- **Zone touchée** : `SlaveHandler` renseigne `HandledRequest.access` (table,
+  adresse, nombre, lecture ou écriture) ; l'onglet Serveur esclave s'en sert
+  pour éclairer en vert les cellules que le maître vient de lire ou d'écrire.
 - **Catalogue d'hypothèses** : `diagnostic.CATALOGUE` est la source unique des
   titres, résumés, déclencheurs, causes et confirmations ; les règles y
   puisent, l'aide et le rapport aussi. Ajouter une règle = ajouter sa fiche.
@@ -159,7 +166,7 @@ docs/                          propositions, plan et compte rendu de phase
   Il sert d'oracle dans les tests (CRC, encodage des PDU). Ne pas l'importer
   hors de `tests/`.
 - Couleurs : **aucune couleur écrite dans un widget**, `tests/test_style.py`
-  refuse tout `#rrggbb` hors de `ui/palette.py`. La charte AD Automation est
+  refuse tout `#rrggbb` hors de `ui/palette.py`. La charte AD est
   la source unique : gris chauds et terracotta, thème sombre et thème clair
   (crème). L'accent (`t.accent`) ne sert qu'à ce qui engage : bouton principal
   (`setProperty("variant", "primary")`), onglet actif, focus, sélection,

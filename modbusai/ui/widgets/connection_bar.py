@@ -26,7 +26,6 @@ class ConnectionBar(QFrame):
         self.setObjectName("topBar")
 
         self.logo = QLabel()
-        self.logo.setToolTip("AD Automation")
         self.app_name = QLabel(APP_NAME)
         self.app_name.setObjectName("appName")
         self.app_tag = QLabel(f"{tr('DIAGNOSTIC MODBUS')}  ·  v{__version__}")

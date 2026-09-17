@@ -109,6 +109,18 @@ class HandledRequest:
     function: int | None
     kind: str  # "réponse", "exception", "ignorée", "perdue", "broadcast", "corrompue", "invalide"
     detail: str = ""
+    access: Access | None = None  # zone de la table touchée, pour la mettre en évidence
+
+
+@dataclass(frozen=True, slots=True)
+class Access:
+    """Zone de table touchée par une requête servie : l'interface s'en sert pour
+    montrer ce que le maître vient de lire ou d'écrire."""
+
+    table: Table
+    address: int
+    count: int
+    write: bool
 
 
 class SlaveHandler:
@@ -120,6 +132,7 @@ class SlaveHandler:
     }
 
     def __init__(self, store: DataStore, config: SlaveConfig, rng: random.Random | None = None) -> None:
+        self._access: Access | None = None  # zone touchée par la requête en cours
         self.store = store
         self.config = config
         self.counters = SlaveCounters()
@@ -139,12 +152,13 @@ class SlaveHandler:
             resp = append_crc(bytes([slave]) + result.response)
             if result.kind == "corrompue":
                 resp = resp[:-1] + bytes([resp[-1] ^ 0xFF])
-        return HandledRequest(adu, resp, result.slave_id, result.function, result.kind, result.detail)
+        return HandledRequest(adu, resp, result.slave_id, result.function, result.kind, result.detail, result.access)
 
     def handle_pdu(self, slave: int, pdu: bytes) -> HandledRequest:
         """Cœur commun RTU / TCP : PDU de requête -> PDU de réponse (sans enveloppe).
         Pour ``kind == "corrompue"``, c'est l'enveloppe qui applique l'altération."""
         c = self.counters
+        self._access = None
         if not pdu:
             c.ignored += 1
             return HandledRequest(pdu, None, slave, None, "invalide", "PDU vide")
@@ -167,15 +181,15 @@ class SlaveHandler:
         if resp is None:
             return HandledRequest(pdu, None, slave, fc, "ignorée", "requête mal formée")
         if broadcast:
-            return HandledRequest(pdu, None, 0, fc, "broadcast", "écriture diffusée, sans réponse")
+            return HandledRequest(pdu, None, 0, fc, "broadcast", "écriture diffusée, sans réponse", self._access)
         if self.config.drop_ratio > 0 and self._rng.random() < self.config.drop_ratio:
             c.dropped += 1
-            return HandledRequest(pdu, None, slave, fc, "perdue", "réponse volontairement non émise")
+            return HandledRequest(pdu, None, slave, fc, "perdue", "réponse volontairement non émise", self._access)
         if self.config.corrupt_ratio > 0 and self._rng.random() < self.config.corrupt_ratio:
             c.corrupted += 1
-            return HandledRequest(pdu, resp, slave, fc, "corrompue", "CRC volontairement faux")
+            return HandledRequest(pdu, resp, slave, fc, "corrompue", "CRC volontairement faux", self._access)
         c.responses += 1
-        return HandledRequest(pdu, resp, slave, fc, "réponse")
+        return HandledRequest(pdu, resp, slave, fc, "réponse", "", self._access)
 
     # ------------------------------------------------------------ interne
     def _exception(self, pdu: bytes, slave: int, fc: int, code: int) -> HandledRequest:
@@ -203,11 +217,13 @@ class SlaveHandler:
                 for i, b in enumerate(bits):
                     if b:
                         out[i // 8] |= 1 << (i % 8)
+                self._access = Access(table, addr, count, write=False)
                 return bytes([fc, len(out)]) + bytes(out)
             if not 1 <= count <= 125:
                 raise _Exc(0x03)
             self._check_range(table, addr, count)
             regs = self.store.get(table, addr, count)
+            self._access = Access(table, addr, count, write=False)
             return bytes([fc, 2 * count]) + b"".join(r.to_bytes(2, "big") for r in regs)
 
         if fc is FunctionCode.WRITE_SINGLE_COIL:
@@ -267,6 +283,7 @@ class SlaveHandler:
         if self.config.read_only:
             raise _Exc(0x04)
         self.store.set(table, address, values)
+        self._access = Access(table, address, len(values), write=True)
         self.counters.writes += 1
 
 

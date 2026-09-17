@@ -24,6 +24,7 @@ from modbusai.i18n import tr
 from modbusai.modbus.records import ExchangeStatus
 from modbusai.transport.records import LinkSettings
 from modbusai.ui.palette import State, color
+from modbusai.ui.style import PAGE_MARGINS
 
 MAX_ROWS = 3000
 _STATUS_STATE = {
@@ -130,7 +131,7 @@ class SnifferPage(QWidget):
         splitter.setChildrenCollapsible(False)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(*PAGE_MARGINS)
         layout.addLayout(top)
         layout.addWidget(self.hint)
         layout.addWidget(splitter, 1)

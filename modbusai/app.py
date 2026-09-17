@@ -7,7 +7,7 @@ import sys
 from PySide6.QtCore import QCoreApplication, QSettings
 from PySide6.QtWidgets import QApplication
 
-from modbusai import APP_NAME, __version__
+from modbusai import SETTINGS_NAME, __version__
 from modbusai.i18n import set_language
 
 
@@ -29,8 +29,8 @@ class _WindowHolder:
 
 
 def run(argv: list[str] | None = None) -> int:
-    QCoreApplication.setOrganizationName(APP_NAME)
-    QCoreApplication.setApplicationName(APP_NAME)
+    QCoreApplication.setOrganizationName(SETTINGS_NAME)
+    QCoreApplication.setApplicationName(SETTINGS_NAME)
     QCoreApplication.setApplicationVersion(__version__)
     app = QApplication(argv if argv is not None else sys.argv)
     set_language(str(QSettings().value("ui/language", "fr")))

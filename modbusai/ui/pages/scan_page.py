@@ -33,6 +33,7 @@ from modbusai.i18n import tr
 from modbusai.modbus.records import FunctionCode
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings
 from modbusai.ui.palette import State, color
+from modbusai.ui.style import PAGE_MARGINS
 from modbusai.ui.widgets.config_dialog import BAUDRATES
 
 _STATUS_STATE = {
@@ -213,7 +214,7 @@ class ScanPage(QWidget):
         right.addWidget(self.summary)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(*PAGE_MARGINS)
         layout.addWidget(params)
         layout.addLayout(right, 1)
 

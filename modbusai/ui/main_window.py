@@ -34,7 +34,7 @@ from modbusai.ui.pages.scan_page import ScanPage
 from modbusai.ui.pages.slave_page import SlavePage
 from modbusai.ui.pages.sniffer_page import SnifferPage
 from modbusai.ui.resources import app_icon
-from modbusai.ui.roles import Role, Tab, tab_states
+from modbusai.ui.roles import Occupancy, Role, Tab, can_start, port_key, tab_states
 from modbusai.ui.theme import THEMES, apply_theme, system_theme
 from modbusai.ui.widgets.about_dialog import AUTHOR, AboutDialog
 from modbusai.ui.widgets.config_dialog import ConfigDialog
@@ -57,7 +57,6 @@ class MainWindow(QMainWindow):
         self.resize(1180, 760)
 
         self._serial_settings, self._tcp_settings, self._protocol = self._load_settings()
-        self._role = Role.IDLE
         self._connected = False
         self._manual_disconnect = False
         self._reconnect_pending = False
@@ -87,7 +86,7 @@ class MainWindow(QMainWindow):
             self._tab_index[tab] = self.tabs.addTab(page, tr(tab.value))
         self.status_label = QLabel(tr("Status : déconnecté"))
         self.status_label.setProperty("variant", "muted")
-        credit = tr("Fait avec Claude Code par {p0}").format(p0=AUTHOR)
+        credit = tr("Fait avec CC par {p0}").format(p0=AUTHOR)
         self.credit_label = QLabel(f"<a href='about' style='color: inherit; text-decoration: none;'>{credit}</a>")
         self.credit_label.setObjectName("credit")
         self.credit_label.setToolTip(tr("À propos : logo, version, historique, mode d'emploi"))
@@ -169,6 +168,7 @@ class MainWindow(QMainWindow):
         self.stress_ctl.finished.connect(self._on_stress_finished)
 
         self.slave_page.start_requested.connect(self._start_slave)
+        self.slave_page.link_changed.connect(self._update_availability)
         self.slave_page.stop_requested.connect(self._stop_slave)
         self.slave_page.status_message.connect(self._set_status)
 
@@ -200,7 +200,7 @@ class MainWindow(QMainWindow):
     def _on_language_changed(self, lang: str) -> None:
         if lang == current_language():
             return
-        if self._role is not Role.IDLE or self._busy_tab() is not None:
+        if self._occupancies() or self._busy_tab() is not None:
             self.connection_bar.set_language(current_language())
             self._set_status(tr("Déconnectez-vous et arrêtez les activités avant de changer de langue."))
             return
@@ -238,8 +238,9 @@ class MainWindow(QMainWindow):
     def _connect(self) -> None:
         if not self._target_defined():
             return
-        if self._role in (Role.SNIFFER, Role.SLAVE):
-            self._set_status(tr("Arrêtez d'abord l'espion ou le serveur esclave : le port est occupé."))
+        allowed, reason = can_start(Role.MASTER, port_key(self._settings), self._occupancies())
+        if not allowed:
+            self._set_status(reason)
             return
         self._manual_disconnect = False
         self._set_status(tr("Ouverture de {p0}…").format(p0=self._settings.summary()))
@@ -267,7 +268,6 @@ class MainWindow(QMainWindow):
 
     def _on_connected(self, settings: SerialSettings) -> None:
         self._connected = True
-        self._role = Role.MASTER
         self._reconnect_pending = False
         self.connection_bar.set_connected(True)
         self.connection_bar.show_settings(settings)
@@ -283,8 +283,6 @@ class MainWindow(QMainWindow):
 
     def _on_disconnected(self) -> None:
         self._connected = False
-        if self._role is Role.MASTER:
-            self._role = Role.IDLE
         self.connection_bar.set_connected(False)
         self.connection_bar.show_settings(self._settings)
         self._set_status(tr("Status : déconnecté"))
@@ -295,8 +293,6 @@ class MainWindow(QMainWindow):
     def _on_link_error(self, message: str) -> None:
         self._pending_after_connect = None
         self._connected = False
-        if self._role is Role.MASTER:
-            self._role = Role.IDLE
         self.connection_bar.set_connected(False)
         self._set_status(message)
         self.master_page.log_error(message)
@@ -309,7 +305,6 @@ class MainWindow(QMainWindow):
     def _on_link_lost(self) -> None:
         """Erreur transport pendant un échange maître : fermer et tenter la reconnexion."""
         self._connected = False
-        self._role = Role.IDLE
         self.connection_bar.set_connected(False)
         self._cmd_close.emit()
         self._maybe_schedule_reconnect()
@@ -342,7 +337,7 @@ class MainWindow(QMainWindow):
         if not self._reconnect_pending:
             return
         self._reconnect_pending = False
-        if not self._connected and self._role is Role.IDLE:
+        if not self._connected:
             self._cmd_open.emit(self._settings)
 
     # ============================================================== retours
@@ -359,7 +354,7 @@ class MainWindow(QMainWindow):
 
     # ================================================================= scan
     def _start_scan(self, _plan) -> None:
-        if not self._connected or self._role is not Role.MASTER:
+        if not self._connected:
             self._set_status(tr("Le scan utilise la liaison du maître : cliquez d'abord sur CONNEXION."))
             return
         if self.campaign_ctl.active:
@@ -383,10 +378,11 @@ class MainWindow(QMainWindow):
     def _ensure_master_link(self, then) -> bool:
         """Exécute ``then`` tout de suite si la liaison maître est ouverte, sinon
         l'ouvre d'abord (le diagnostic ne dépend pas de l'onglet Maître)."""
-        if self._connected and self._role is Role.MASTER:
+        if self._connected:
             return True
-        if self._role is not Role.IDLE:
-            self._set_status(tr("Arrêtez l'espion ou le serveur esclave : le port est occupé."))
+        allowed, reason = can_start(Role.MASTER, port_key(self._settings), self._occupancies())
+        if not allowed:
+            self._set_status(reason)
             return False
         if not self._target_defined():
             return False
@@ -443,13 +439,15 @@ class MainWindow(QMainWindow):
             return
         if not self._target_defined():
             return
-        if self._role is Role.SLAVE:
-            self._set_status(tr("Arrêtez le serveur esclave avant de lancer l'écoute."))
-            return
-        if self._connected or self._role is Role.MASTER:
+        port = port_key(self._serial_settings)
+        if self._connected and port == port_key(self._settings):
+            # L'espion écoute le port du bandeau : on rend la liaison maître d'abord.
             self._release_master_then(self._start_sniffer)
             return
-        self._role = Role.SNIFFER
+        allowed, reason = can_start(Role.SNIFFER, port, self._occupancies())
+        if not allowed:
+            self._set_status(reason)
+            return
         self._sniffer = SnifferWorker(self._serial_settings, self)
         s = self._sniffer
         s.started_listening.connect(self.sniffer_page.on_started)
@@ -473,9 +471,8 @@ class MainWindow(QMainWindow):
         if self._sniffer is not None:
             self._sniffer.wait(2000)
             self._sniffer = None
-        self._role = Role.IDLE
         self.sniffer_page.on_stopped()
-        self._set_status(tr("Écoute arrêtée. Cliquez sur CONNEXION pour repasser en maître."))
+        self._set_status(tr("Écoute arrêtée."))
         self._update_availability()
 
     def _on_passive_error(self, message: str) -> None:
@@ -483,22 +480,22 @@ class MainWindow(QMainWindow):
         self.sniffer_page.status_message.emit(message)
 
     # ============================================================== esclave
-    def _start_slave(self, config: SlaveConfig) -> None:
-        if not self._is_tcp and not self._target_defined():
+    def _start_slave(self, config: SlaveConfig, settings: LinkSettings) -> None:
+        """Le serveur esclave a sa propre liaison : il peut tourner en même temps
+        que le maître, à condition de ne pas viser le même port."""
+        if isinstance(settings, SerialSettings) and not settings.port:
+            QMessageBox.warning(self, APP_TITLE, tr("Choisissez le port du serveur esclave (bouton LIAISON)."))
             return
-        if self._role is Role.SNIFFER:
-            self._set_status(tr("Arrêtez l'écoute avant de lancer le serveur esclave."))
+        allowed, reason = can_start(Role.SLAVE, port_key(settings, listen=True), self._occupancies())
+        if not allowed:
+            self._set_status(reason)
+            self.slave_page.log_panel.console.log_error(reason)
             return
-        if self._connected or self._role is Role.MASTER:
-            self._release_master_then(lambda: self._start_slave(config))
-            return
-        self._role = Role.SLAVE
-        if self._is_tcp:
+        if isinstance(settings, TcpSettings):
             # En serveur, l'hôte configuré est l'adresse d'écoute ; vide = toutes les interfaces
-            listen = TcpSettings("", self._tcp_settings.port)
-            self._slave = TcpSlaveWorker(listen, self.store, config, self)
+            self._slave = TcpSlaveWorker(TcpSettings(settings.host, settings.port), self.store, config, self)
         else:
-            self._slave = SlaveWorker(self._serial_settings, self.store, config, self)
+            self._slave = SlaveWorker(settings, self.store, config, self)
         w = self._slave
         w.started_serving.connect(self.slave_page.on_started)
         w.link_error.connect(self._on_slave_error)
@@ -518,9 +515,8 @@ class MainWindow(QMainWindow):
         if self._slave is not None:
             self._slave.wait(2000)
             self._slave = None
-        self._role = Role.IDLE
         self.slave_page.on_stopped()
-        self._set_status(tr("Serveur esclave arrêté. Cliquez sur CONNEXION pour repasser en maître."))
+        self._set_status(tr("Serveur esclave arrêté."))
         self._update_availability()
 
     def _on_slave_error(self, message: str) -> None:
@@ -535,25 +531,46 @@ class MainWindow(QMainWindow):
             return Tab.DIAGNOSTIC
         return None
 
+    def _occupancies(self) -> tuple[Occupancy, ...]:
+        """Rôles actifs et ressource que chacun tient (port série ou point TCP)."""
+        active: list[Occupancy] = []
+        if self._connected:
+            active.append(Occupancy(Role.MASTER, port_key(self._settings)))
+        if self._sniffer is not None:
+            active.append(Occupancy(Role.SNIFFER, port_key(self._serial_settings)))
+        if self._slave is not None:
+            active.append(Occupancy(Role.SLAVE, port_key(self._slave.settings, listen=True)))
+        return tuple(active)
+
     def _update_availability(self) -> None:
         busy = self._busy_tab() is not None
-        master_ok = self._connected and self._role is Role.MASTER and not busy
-        port_free = self._role in (Role.IDLE, Role.MASTER) and not busy
-        # Blocages entre onglets : un rôle actif verrouille les autres onglets
-        states = tab_states(self._role, self._connected, self._busy_tab())
+        active = self._occupancies()
+        master_ok = self._connected and not busy
+        # Seule une activité longue verrouille des onglets ; les rôles, eux, se
+        # partagent la fenêtre tant qu'ils ne visent pas le même port.
+        states = tab_states(self._busy_tab())
         for tab, idx in self._tab_index.items():
             st = states[tab]
             self.tabs.setTabEnabled(idx, st.enabled)
             self.tabs.setTabToolTip(idx, st.reason)
         self.scan_page.set_tcp(self._is_tcp)
-        self.sniffer_page.set_available(
-            port_free and not self._is_tcp, tr("Écoute passive disponible en RTU uniquement") if self._is_tcp else ""
-        )
-        self.slave_page.set_available(port_free)
+        sniffer_ok, sniffer_reason = can_start(Role.SNIFFER, port_key(self._serial_settings), active)
+        if self._is_tcp:
+            sniffer_ok, sniffer_reason = False, tr("Écoute passive disponible en RTU uniquement")
+        elif self._connected and port_key(self._serial_settings) == port_key(self._settings):
+            # Même port que le maître : autorisé, la liaison maître sera rendue
+            sniffer_ok, sniffer_reason = not busy, tr("La liaison maître sera fermée pour libérer le port.")
+        self.sniffer_page.set_available(sniffer_ok and self._sniffer is None, sniffer_reason)
+        slave_ok, slave_reason = can_start(Role.SLAVE, port_key(self.slave_page.link_settings(), listen=True), active)
+        self.slave_page.set_available(slave_ok, slave_reason)
         self.scan_page.set_available(master_ok)
-        self.diagnostic_page.set_can_run_tests(port_free)
-        self.connection_bar.connect_btn.setEnabled(not self._connected and self._role is Role.IDLE)
-        self.connection_bar.config_btn.setEnabled(self._role is Role.IDLE)
+        self.diagnostic_page.set_can_run_tests(
+            not busy and (self._connected or can_start(Role.MASTER, port_key(self._settings), active)[0])
+        )
+        self.connection_bar.connect_btn.setEnabled(
+            not self._connected and can_start(Role.MASTER, port_key(self._settings), active)[0]
+        )
+        self.connection_bar.config_btn.setEnabled(not self._connected)
 
     # ============================================================ utilitaires
     def _set_status(self, text: str) -> None:

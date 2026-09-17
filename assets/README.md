@@ -1,14 +1,17 @@
 # Ressources graphiques
 
-- `logo-ad-automation.pdf` : logo AD AUTOMATION fourni par Antony DE JESUS (source vectorielle).
-- `logo-ad.svg` : conversion vectorielle de la page 1 du PDF.
-- `logo-ad-<taille>.png` : logo noir sur fond transparent, pour le thème clair.
-- `logo-ad-<taille>-blanc.png` : même logo en blanc, pour le thème sombre.
+- `logo-a-<taille>.png` : la marque de l'application, le A seul, noir sur fond
+  transparent (thème clair) ; `-blanc` pour le thème sombre. Tailles 64 à 512.
+- `modbusai.ico` / `modbusai-icon-256.png` : icône de l'application, le A clair
+  sur carré arrondi terracotta (#D97757), la couleur d'accent de la charte.
+- `source/` : artwork d'origine (PDF, SVG, PNG du logo complet). Conservé pour
+  régénérer la marque, **non embarqué** dans l'exécutable.
 
-Les PNG sont générés depuis le PDF (PyMuPDF) ; la variante blanche est une
-inversion RVB à alpha conservé. Ne pas modifier les PNG à la main : régénérer
-depuis le PDF si le logo change.
+Les fichiers de `source/` ne sont pas chargés par l'application : le spec
+PyInstaller n'embarque que `assets/*.png` et `assets/modbusai.ico`.
 
-Chargement dans l'application : `modbusai.ui.resources.asset_path(nom)`, qui
-gère aussi le cas PyInstaller (`sys._MEIPASS`). Les fichiers sont embarqués par
-`packaging/modbusai.spec` via `datas`.
+Régénération : le A est extrait du logo complet par analyse des composantes
+connexes (on garde les deux plus grandes, qui forment le monogramme, et on
+laisse le cadre et les textes). Chargement dans l'application :
+`modbusai.ui.resources.logo_pixmap()` / `app_icon()`, qui gèrent le cas
+PyInstaller (`sys._MEIPASS`).

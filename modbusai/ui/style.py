@@ -14,6 +14,7 @@ from modbusai.ui.palette import Tokens, current
 
 RADIUS = 8
 CARD_RADIUS = 12
+PAGE_MARGINS = (12, 12, 12, 12)  # marges intérieures d'un onglet : rien ne colle au trait du bandeau
 
 
 def base_font_family() -> str:

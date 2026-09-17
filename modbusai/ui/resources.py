@@ -21,10 +21,10 @@ def asset_path(name: str) -> Path:
 
 
 def logo_pixmap(size: int = 64, dark: bool = False) -> QPixmap:
-    """Logo AD Automation, variante blanche pour le thème sombre."""
+    """Logo AD (le A seul), variante blanche pour le thème sombre."""
     suffix = "-blanc" if dark else ""
     for candidate in (size, 128, 256, 512, 64):
-        path = asset_path(f"logo-ad-{candidate}{suffix}.png")
+        path = asset_path(f"logo-a-{candidate}{suffix}.png")
         if path.exists():
             pix = QPixmap(str(path))
             if candidate != size and not pix.isNull():

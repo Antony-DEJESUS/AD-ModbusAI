@@ -64,6 +64,7 @@ from modbusai.i18n import tr
 from modbusai.modbus.records import Request
 from modbusai.transport.records import LinkSettings
 from modbusai.ui.palette import State, color
+from modbusai.ui.style import PAGE_MARGINS
 from modbusai.ui.widgets.labels import section
 from modbusai.ui.widgets.request_bar import RegisterType
 
@@ -356,7 +357,7 @@ class DiagnosticPage(QWidget):
         analysis_w.setLayout(analysis_layout)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(*PAGE_MARGINS)
         layout.addWidget(self.target_box)
         layout.addWidget(analysis_w, 1)
 

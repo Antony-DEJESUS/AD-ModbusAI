@@ -5,6 +5,28 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 0.3.3 - AD - ModbusAI : marque, maître et esclave en parallèle, cellules animées
+
+- Le logiciel s'appelle « AD - ModbusAI » ; l'exécutable devient
+  `AD-ModbusAI_v<version>.exe` et le rapport `AD-ModbusAI_diagnostic_*.txt`.
+  Les réglages enregistrés (port, thème, langue) sont conservés.
+- Marque : le logo se réduit au A seul, l'icône de l'application est ce A clair
+  sur carré terracotta. L'artwork d'origine part dans `assets/source/`, hors
+  exécutable. Plus aucune mention de société dans l'interface, et la mention du
+  pied de fenêtre devient « Fait avec CC par Antony DE JESUS ».
+- **Maître et serveur esclave en même temps**, sur deux ports différents : le
+  serveur a sa propre liaison (bouton LIAISON dans son onglet, protocole RTU ou
+  TCP, réglages mémorisés). L'arbitrage se fait désormais par port et non plus
+  par rôle : deux rôles cohabitent tant qu'ils ne visent pas la même ressource,
+  et le refus nomme le port et le rôle qui l'occupe. Une activité longue (scan,
+  campagne, torture) ne verrouille plus que les onglets qui partagent la liaison
+  maître.
+- Serveur esclave : les cellules lues ou écrites par un maître s'éclairent en
+  vert pendant deux secondes, avec une extinction progressive ; on voit d'un
+  coup d'œil ce que la supervision interroge vraiment.
+- Thème sombre éclairci (gris chaud #2E2C2A) et marges intérieures des onglets :
+  plus rien ne colle au trait du bandeau.
+
 ## 0.3.2 - Charte graphique AD : gris foncé et terracotta
 
 - Charte unique dans `modbusai/ui/palette.py` : gris chauds et terracotta

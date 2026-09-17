@@ -27,10 +27,12 @@ def dynamic_keys() -> set[str]:
     from modbusai.modbus.codec import DisplayMode, Radix
     from modbusai.modbus.exceptions import EXCEPTION_LABELS
     from modbusai.modbus.slave import Table
-    from modbusai.ui.roles import Tab
+    from modbusai.ui.roles import Role, Tab
 
     keys = {e.value for e in DisplayMode} | {e.value for e in Radix} | {t.label for t in Table}
-    keys |= {e.value for e in ScanStatus} | {e.value for e in FrameKind} | {t.value for t in Tab}
+    keys |= (
+        {e.value for e in ScanStatus} | {e.value for e in FrameKind} | {t.value for t in Tab} | {r.value for r in Role}
+    )
     keys |= set(EXCEPTION_LABELS.values()) | {label for _lo, _hi, label, _c in SCORE_LEGEND} | {SCORE_EXPLANATION}
     keys |= {"réponse", "exception", "ignorée", "perdue", "broadcast", "corrompue", "invalide"}
     for info in CATALOGUE.values():

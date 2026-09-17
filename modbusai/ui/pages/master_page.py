@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QSplitter, QVBoxLayout, QWidget
 from modbusai.i18n import tr
 from modbusai.modbus import codec
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus, Request
+from modbusai.ui.style import PAGE_MARGINS
 from modbusai.ui.widgets.actions_panel import ActionsPanel
 from modbusai.ui.widgets.exchange_panel import ExchangePanel
 from modbusai.ui.widgets.log_console import LogPanel
@@ -55,7 +56,7 @@ class MasterPage(QWidget):
         vertical.setChildrenCollapsible(False)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(*PAGE_MARGINS)
         layout.setSpacing(4)
         layout.addWidget(self.request_bar)
         layout.addWidget(vertical, 1)

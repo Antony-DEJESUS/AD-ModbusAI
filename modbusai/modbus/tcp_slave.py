@@ -32,7 +32,7 @@ def make_tcp_frame_handler(
             # verra une réponse qui ne correspond à aucune requête en cours.
             resp = bytes([resp[0] ^ 0xFF, resp[1] ^ 0xFF]) + resp[2:]
             detail = "identifiant de transaction volontairement altéré"
-        result = HandledRequest(frame, resp, core.slave_id, core.function, core.kind, detail)
+        result = HandledRequest(frame, resp, core.slave_id, core.function, core.kind, detail, core.access)
         if on_handled:
             on_handled(result, client)
         return resp

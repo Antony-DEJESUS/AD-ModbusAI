@@ -1,23 +1,29 @@
-"""Rôles exclusifs sur le port et blocages entre onglets.
+"""Rôles et arbitrage des ports.
 
-Table pure (sans Qt) : pour un rôle, un état de connexion et une activité en
-cours, dit quels onglets sont accessibles et pourquoi les autres ne le sont
-pas. Testable sans interface ; la fenêtre ne fait que l'appliquer.
+Un port ne peut servir qu'à un rôle à la fois, mais rien n'interdit de faire
+tourner plusieurs rôles en parallèle sur des ports différents : maître sur
+COM3 et serveur esclave sur COM7, par exemple, pour se répondre à soi-même ou
+simuler un équipement pendant qu'on interroge le vrai.
+
+Table pure (sans Qt) : elle dit quels onglets sont accessibles et si un rôle
+peut démarrer sur un port donné. Testable sans interface ; la fenêtre applique.
 """
 
 from __future__ import annotations
 
 import enum
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from modbusai.i18n import tr
+from modbusai.transport.records import LinkSettings, SerialSettings
 
 
 class Role(enum.Enum):
     IDLE = "aucun"
     MASTER = "maître"
     SNIFFER = "espion"
-    SLAVE = "esclave"
+    SLAVE = "serveur esclave"
 
 
 class Tab(enum.Enum):
@@ -29,6 +35,31 @@ class Tab(enum.Enum):
 
 
 MASTER_TABS = (Tab.MASTER, Tab.SCAN, Tab.DIAGNOSTIC)
+"""Onglets servis par la même liaison maître : ils se partagent un seul port."""
+
+
+def port_key(settings: LinkSettings | None, listen: bool = False) -> str:
+    """Ressource occupée par une liaison.
+
+    Deux liaisons entrent en conflit quand leur clé est identique : même port
+    série, ou même point TCP. ``listen`` distingue le serveur esclave (qui
+    ouvre une écoute locale) d'un maître TCP (qui se connecte au loin) :
+    écouter sur 502 et interroger un esclave distant sur 502 ne se gênent pas.
+    """
+    if settings is None:
+        return ""
+    if isinstance(settings, SerialSettings):
+        return settings.port.strip().upper()  # le port série est physique : écoute ou émission, c'est le même
+    host = settings.host.strip().lower() or "0.0.0.0"
+    return f"{'tcp-ecoute' if listen else 'tcp'}:{host}:{settings.port}"
+
+
+@dataclass(frozen=True, slots=True)
+class Occupancy:
+    """Un rôle actif et la ressource qu'il tient."""
+
+    role: Role
+    port: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,45 +68,26 @@ class TabState:
     reason: str = ""
 
 
-def tab_states(role: Role, connected: bool, busy_tab: Tab | None = None) -> dict[Tab, TabState]:
-    """``busy_tab`` : onglet dont une activité longue occupe la liaison (scan, campagne, cycle)."""
+def tab_states(busy_tab: Tab | None = None) -> dict[Tab, TabState]:
+    """``busy_tab`` : onglet dont une activité longue occupe la liaison maître
+    (scan, campagne, torture). Elle ne verrouille que les onglets qui partagent
+    cette liaison ; l'espion et le serveur esclave ont la leur."""
     states = {t: TabState(True) for t in Tab}
-    if role is Role.SNIFFER:
-        for t in Tab:
-            if t is not Tab.SNIFFER:
-                states[t] = TabState(False, tr("Arrêtez l'écoute (onglet ESPION) pour libérer le port."))
-        return states
-    if role is Role.SLAVE:
-        for t in Tab:
-            if t is not Tab.SLAVE:
-                states[t] = TabState(False, tr("Arrêtez le serveur esclave pour libérer le port."))
-        return states
-    if busy_tab is not None:
-        for t in Tab:
+    if busy_tab in MASTER_TABS:
+        reason = tr("Une activité est en cours dans l'onglet {p0} : arrêtez-la d'abord.").format(p0=tr(busy_tab.value))
+        for t in MASTER_TABS:
             if t is not busy_tab:
-                states[t] = TabState(
-                    False, f"Une activité est en cours dans l'onglet {busy_tab.value} : arrêtez-la d'abord."
-                )
-        return states
-    if role is Role.MASTER and connected:
-        # Onglets accessibles : démarrer l'écoute ou le serveur ferme d'abord la
-        # liaison maître (un seul rôle tient le port), inutile de les verrouiller.
-        hint = tr("La liaison maître sera fermée automatiquement pour libérer le port.")
-        states[Tab.SNIFFER] = TabState(True, hint)
-        states[Tab.SLAVE] = TabState(True, hint)
+                states[t] = TabState(False, reason)
     return states
 
 
-def can_start(role: Role, connected: bool, wanted: Role, busy: bool) -> tuple[bool, str]:
-    """Peut-on démarrer ``wanted`` depuis l'état courant ?"""
-    if busy:
-        return False, tr("Une activité est en cours : arrêtez-la d'abord.")
-    if wanted is Role.MASTER:
-        if role is Role.IDLE:
-            return True, ""
-        if role is Role.MASTER:
-            return (not connected), tr("Déjà connecté.")
-        return False, tr("Arrêtez d'abord l'espion ou le serveur esclave : le port est occupé.")
-    if role in (Role.IDLE, Role.MASTER):
-        return True, ""  # la liaison maître est fermée avant de céder le port
-    return False, tr("Un autre rôle occupe déjà le port.")
+def can_start(wanted: Role, port: str, active: Iterable[Occupancy] = ()) -> tuple[bool, str]:
+    """Peut-on démarrer ``wanted`` sur ``port`` ? Sinon, pourquoi."""
+    for occupancy in active:
+        if occupancy.role is wanted:
+            return False, tr("{p0} est déjà actif.").format(p0=tr(wanted.value).capitalize())
+        if port and occupancy.port == port:
+            return False, tr("{p0} est déjà utilisé par {p1} : choisissez un autre port.").format(
+                p0=port, p1=tr(occupancy.role.value)
+            )
+    return True, ""
