@@ -63,6 +63,7 @@ from modbusai.analysis.stress import StressPhase, StressReport, default_scenario
 from modbusai.i18n import tr
 from modbusai.modbus.records import Request
 from modbusai.transport.records import LinkSettings
+from modbusai.ui.metrics import line_height, text_width, use_tabular_figures
 from modbusai.ui.palette import State, color
 from modbusai.ui.style import PAGE_MARGINS
 from modbusai.ui.widgets.labels import section
@@ -262,8 +263,8 @@ class DiagnosticPage(QWidget):
         target_layout.addStretch(1)
         self.target_box = QGroupBox(tr("Cible et campagne"))
         self.target_box.setLayout(target_layout)
-        self.target_box.setMinimumWidth(400)
-        self.target_box.setMaximumWidth(480)
+        self.target_box.setMinimumWidth(text_width(self, "Type   4 Input registers (3xxxx)", extra=120))
+        self.target_box.setMaximumWidth(text_width(self, "Type   4 Input registers (3xxxx)", extra=200))
 
         # ------------------------------------------------------------- analyse
         self.analyse_btn = QPushButton(tr("ANALYSER"))
@@ -311,13 +312,15 @@ class DiagnosticPage(QWidget):
         self.stats_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.stats_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.stats_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.stats_table.setMaximumHeight(160)
+        self.stats_table.setMaximumHeight(line_height(self, 6.5, extra=12))
+        use_tabular_figures(self.stats_table)
 
         self.legend = ScoreLegend()
         self.hyp_list = QListWidget()
-        self.hyp_list.setMinimumWidth(300)
+        self.hyp_list.setMinimumWidth(text_width(self, "100   Qualité de ligne : bruit", extra=32))
         self.detail = QPlainTextEdit()
         self.detail.setReadOnly(True)
+        self.detail.setPlaceholderText(tr("Indices retenus par l'hypothèse sélectionnée"))
         self.tests_box = QVBoxLayout()
         self.tests_box.setAlignment(Qt.AlignmentFlag.AlignTop)
         tests_widget = QWidget()
@@ -526,11 +529,21 @@ class DiagnosticPage(QWidget):
         if self._hypotheses:
             self.hyp_list.setCurrentRow(0)
         else:
+            # État vide : dire quoi faire plutôt que laisser quatre cadres nus
+            empty = QListWidgetItem(tr("Aucune hypothèse pour l'instant"))
+            empty.setFlags(Qt.ItemFlag.NoItemFlags)
+            empty.setForeground(QColor(color(State.MUTED)))
+            self.hyp_list.addItem(empty)
             self.detail.setPlainText(
-                "Pas assez de données. Lancez une campagne (à gauche), faites des lectures dans l'onglet Maître, "
-                "écoutez le bus (Espion) ou scannez, puis cliquez sur ANALYSER."
+                tr(
+                    "Pas assez de données. Lancez une campagne (à gauche), faites des lectures dans l'onglet Maître, écoutez le bus (Espion) ou scannez, puis cliquez sur ANALYSER."
+                )
             )
             self._clear_tests()
+            hint = QLabel(tr("Les tests proposés apparaîtront ici, une fois une hypothèse sélectionnée."))
+            hint.setWordWrap(True)
+            hint.setProperty("variant", "muted")
+            self.tests_box.addWidget(hint)
 
     def _fill_stats(self) -> None:
         t = self.stats_table

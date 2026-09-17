@@ -13,6 +13,9 @@ tourner en parallèle sur deux ports différents.
 | DIAGNOSTIC | campagnes minutées, test de torture expliqué phase par phase, statistiques, hypothèses classées avec légende et aide, tests pour départager, export txt avec toutes les trames |
 | SERVEUR ESCLAVE | simulateur d'esclave façon Mod_RSsim (RTU ou TCP) sur sa propre liaison, injection de défauts, maîtres connectés, cellules lues ou écrites éclairées en vert |
 
+Au premier démarrage (et à la première ouverture de chaque version), la pop-up
+À propos présente l'outil et son historique ; le bouton À PROPOS la rouvre.
+
 Habillage : charte AD (gris chauds et terracotta), thème sombre et
 thème clair, définie une seule fois dans `modbusai/ui/palette.py`.
 

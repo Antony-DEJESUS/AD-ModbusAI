@@ -32,6 +32,7 @@ from modbusai.analysis.scanner import COMMON_BAUDRATES, ScanPlan, ScanResult, Sc
 from modbusai.i18n import tr
 from modbusai.modbus.records import FunctionCode
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings
+from modbusai.ui.metrics import text_width, use_tabular_figures
 from modbusai.ui.palette import State, color
 from modbusai.ui.style import PAGE_MARGINS
 from modbusai.ui.widgets.config_dialog import BAUDRATES
@@ -171,8 +172,8 @@ class ScanPage(QWidget):
         params_layout.addStretch(1)
         params = QGroupBox(tr("Paramètres du scan"))
         params.setLayout(params_layout)
-        params.setMinimumWidth(440)
-        params.setMaximumWidth(500)
+        params.setMinimumWidth(text_width(self, "Vitesses   9600  19200  38400  57600", extra=60))
+        params.setMaximumWidth(text_width(self, "Vitesses   9600  19200  38400  57600", extra=140))
 
         self.start_btn = QPushButton(tr("LANCER SCAN"))
         self.start_btn.setProperty("variant", "primary")
@@ -199,6 +200,7 @@ class ScanPage(QWidget):
             [tr("Esclave"), tr("Statut"), tr("Temps (ms)"), tr("Liaison"), tr("Détail"), tr("Identification")]
         )
         self.table.verticalHeader().setVisible(False)
+        use_tabular_figures(self.table)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         header = self.table.horizontalHeader()

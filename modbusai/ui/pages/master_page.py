@@ -152,7 +152,7 @@ class MasterPage(QWidget):
     def _ensure_connected(self) -> bool:
         if self._connected:
             return True
-        self.on_request_failed("Liaison fermée : cliquez sur CONNEXION")
+        self.on_request_failed(tr("Liaison fermée : cliquez sur CONNECTER"))
         return False
 
     # ================================================================ cycle
@@ -225,7 +225,7 @@ class MasterPage(QWidget):
             if reg_type.is_bits
             else codec.format_registers(values, start, self._display_options())
         )
-        self.grid.show_rows(rows)
+        self.grid.show_rows(rows, () if stale else _extras(rows, values, start, reg_type.is_bits))
         self.grid.mark_stale(stale)
 
     def _clear(self) -> None:
@@ -233,3 +233,20 @@ class MasterPage(QWidget):
         self.exchange.clear()
         self._last_values = None
         self._refresh_grid()
+
+
+def _extras(rows, values, start: int, is_bits: bool) -> list[tuple[str, str]]:
+    """Hexadécimal et binaire des registres couverts par chaque ligne : la même
+    donnée sous les trois formes, sans changer de mode d'affichage."""
+    if is_bits:
+        return [("", "") for _ in rows]
+    out: list[tuple[str, str]] = []
+    for row in rows:
+        words = values[row.address - start : row.address - start + max(1, row.span)]
+        if not words:
+            out.append(("", ""))
+            continue
+        hexa = " ".join(f"{w:04X}" for w in words)
+        binary = codec.format_int(words[0], 16, codec.Radix.BIN, False) if len(words) == 1 else ""
+        out.append((hexa, binary))
+    return out

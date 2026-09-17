@@ -21,5 +21,6 @@ select = ["E", "F", "I", "UP", "B"]
 "modbusai/analysis/stress.py" = ["E501"]
 "modbusai/analysis/report.py" = ["E501"]
 "modbusai/i18n_en.py" = ["E501"]  # dictionnaire de traduction
+"modbusai/ui/pages/diagnostic_page.py" = ["E501"]  # phrases d'aide en français
 "modbusai/ui/style.py" = ["E501"]  # feuille de style
 "modbusai/ui/widgets/about_dialog.py" = ["E501"]  # mode d'emploi

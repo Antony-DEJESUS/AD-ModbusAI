@@ -4,7 +4,7 @@ Versionnage : X.Y.Z, phase 1 = 0.1.x. Le numéro est affiché dans la barre de
 titre et embarqué dans l'exécutable (voir packaging/modbusai.spec).
 """
 
-__version__ = "0.3.3"
+__version__ = "0.3.4"
 APP_NAME = "AD - ModbusAI"
 APP_TITLE = f"{APP_NAME} v{__version__}"
 # Identifiant des réglages QSettings : figé, il ne suit pas le nom affiché

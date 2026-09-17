@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from modbusai.i18n import tr
 from modbusai.transport.ports import list_serial_ports
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
+from modbusai.ui.metrics import line_height
 from modbusai.ui.network_tools import PingWorker, network_connections_available, open_network_connections
 
 BAUDRATES = (1200, 2400, 4800, 9600, 14400, 19200, 38400, 57600, 115200)
@@ -190,7 +191,7 @@ class TcpForm(QWidget):
             self.net_btn.setToolTip(tr("Disponible uniquement sous Windows"))
         self.ping_output = QPlainTextEdit()
         self.ping_output.setReadOnly(True)
-        self.ping_output.setMaximumHeight(120)
+        self.ping_output.setMaximumHeight(line_height(self, 6, extra=12))
         self.ping_output.setPlaceholderText(tr("Résultat du ping"))
 
         form = QFormLayout()

@@ -45,7 +45,7 @@ modbusai/analysis/             couche 2 bis : exploitation des enregistrements, 
     report.py                  rapport texte exportable (statistiques, hypothèses, phases détaillées, trace des trames)
     session.py                 SessionStore : historique des observations
 modbusai/ui/                   couche 3 : Qt uniquement
-    main_window.py             bandeau, thème, langue, onglets, arbitrage du port, campagnes / torture
+    main_window.py             bandeau (liaison du MAÎTRE), thème, langue, onglets, arbitrage des ports, campagnes
     roles.py                   Role, Tab, port_key(), Occupancy, can_start(), tab_states() : arbitrage des ports
     workers.py                 ModbusWorker (maître RTU/TCP), SnifferWorker, SlaveWorker, TcpSlaveWorker
     controllers.py             ScanController, CampaignController (durée), StressController (phases)
@@ -53,13 +53,16 @@ modbusai/ui/                   couche 3 : Qt uniquement
     theme.py                   palette Qt construite depuis la charte, application du thème
     style.py                   feuille de style engendrée depuis les jetons (cartes, onglets, accent)
     icons.py                   chevrons et coche dessinés à l'exécution dans la couleur du thème
+    metrics.py                 largeurs et hauteurs tirées du texte, police à chiffres tabulaires
     widgets/labels.py          section() et muted() : étiquettes typées par la feuille de style
+    widgets/stat_tiles.py      rangée de compteurs : valeur lisible, libellé discret, couleur si non nul
     resources.py               logo, icône, CHANGELOG (compatible PyInstaller)
     network_tools.py           ping système dans un thread, ouverture de ncpa.cpl (Windows)
     pages/                     master_page, sniffer_page, scan_page, diagnostic_page, slave_page
     widgets/                   connection_bar, request_bar, actions_panel, register_grid, exchange_panel,
                                log_console, config_dialog (volets série / TCP), about_dialog
-assets/                        logo A (PNG noir et blanc), icône .ico ; source/ = artwork d'origine, non embarqué
+assets/                        marque mark-*.png (A + « AD »), icône .ico (A sur fond d'accent) ; source/ = artwork d'origine, non embarqué
+tools/make_logo.py             régénère marque et icône, --accent donne sa couleur à chaque outil de la gamme
 tests/                         pytest ; fake_slave.py (esclave sur pty), virtual_bus.py (bus RS-485 virtuel)
 packaging/modbusai.spec        PyInstaller, exécutable unique ModbusAI_v<version>, ressources embarquées
 docs/                          propositions, plan et compte rendu de phase
@@ -142,6 +145,10 @@ docs/                          propositions, plan et compte rendu de phase
   `phase_reading` en clair) et enfin la trace de toutes les trames. Le fichier
   doit se suffire à lui-même : il est relu sans l'application, éventuellement
   par un assistant.
+- **Marque** : `assets/mark-*.png` (le A et les lettres « AD ») pour l'interface,
+  `modbusai.ico` (le A seul sur fond d'accent) pour la barre des tâches, où les
+  lettres seraient illisibles. `tools/make_logo.py --accent` les régénère : la
+  gamme d'outils partage la marque et se distingue par la couleur.
 - **Charte graphique** : `ui/palette.py` décrit les deux thèmes par des jetons
   (fond, surfaces, cartes, bordures, texte, accent, états). `ui/theme.py` en
   fait une `QPalette`, `ui/style.py` la feuille de style, `ui/icons.py` les
@@ -165,6 +172,11 @@ docs/                          propositions, plan et compte rendu de phase
 - pymodbus n'est pas utilisé par l'application : la pile RTU est en propre.
   Il sert d'oracle dans les tests (CRC, encodage des PDU). Ne pas l'importer
   hors de `tests/`.
+- Dimensions : **aucune largeur ni hauteur en pixels dans un widget**. Windows
+  à 125 ou 150 % agrandit la police, pas les constantes : passer par
+  `ui/metrics.py` (`text_width`, `line_height`) ou par `sizeHint()` des
+  contrôles. Les tableaux, compteurs et consoles utilisent les chiffres
+  tabulaires (`use_tabular_figures`, `mono_font`).
 - Couleurs : **aucune couleur écrite dans un widget**, `tests/test_style.py`
   refuse tout `#rrggbb` hors de `ui/palette.py`. La charte AD est
   la source unique : gris chauds et terracotta, thème sombre et thème clair

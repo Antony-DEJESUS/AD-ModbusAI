@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import QCoreApplication, QSettings
+from PySide6.QtCore import QCoreApplication, QSettings, QTimer
 from PySide6.QtWidgets import QApplication
 
 from modbusai import SETTINGS_NAME, __version__
@@ -26,6 +26,10 @@ class _WindowHolder:
         self.window.show()
         if old is not None:
             old.close()
+        else:
+            # Premier démarrage (et première ouverture d'une nouvelle version) :
+            # la pop-up À propos présente l'outil. Pas au changement de langue.
+            QTimer.singleShot(0, self.window.show_about_on_first_run)
 
 
 def run(argv: list[str] | None = None) -> int:

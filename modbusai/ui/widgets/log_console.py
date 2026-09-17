@@ -5,11 +5,11 @@ from __future__ import annotations
 from html import escape
 
 from PySide6.QtCore import Signal
-from PySide6.QtGui import QFont, QFontDatabase
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
 
 from modbusai.i18n import tr
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus
+from modbusai.ui.metrics import mono_font
 from modbusai.ui.palette import State, color
 from modbusai.ui.widgets.labels import section
 
@@ -29,9 +29,7 @@ class LogConsole(QPlainTextEdit):
         self.setReadOnly(True)
         self.setMaximumBlockCount(5000)
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
-        font.setStyleHint(QFont.StyleHint.Monospace)
-        self.setFont(font)
+        self.setFont(mono_font())
         self.setPlaceholderText(tr("Console : horodatage, trame émise, trame reçue, temps de réponse, erreur"))
 
     def log_record(self, rec: ExchangeRecord) -> None:

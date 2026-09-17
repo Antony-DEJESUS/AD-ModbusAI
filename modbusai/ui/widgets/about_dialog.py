@@ -33,7 +33,7 @@ def manual_html() -> str:
         (
             tr("Bandeau"),
             tr(
-                "Choisir le protocole (RTU série ou TCP), régler la liaison dans CONFIGURATION, puis CONNEXION. Le bouton THÈME bascule clair / sombre, la liste FR / EN change la langue."
+                "Le bandeau règle la liaison du MAÎTRE : protocole (RTU série ou TCP), CONFIGURER, puis CONNECTER. Le serveur esclave a sa propre liaison dans son onglet, sur un autre port : les deux peuvent tourner en même temps. Le bouton THÈME bascule clair / sombre, la liste FR / EN change la langue."
             ),
         ),
         (

@@ -21,10 +21,13 @@ def asset_path(name: str) -> Path:
 
 
 def logo_pixmap(size: int = 64, dark: bool = False) -> QPixmap:
-    """Logo AD (le A seul), variante blanche pour le thème sombre."""
+    """Marque AD (le A et les lettres « AD »), variante blanche pour le thème sombre.
+
+    L'icône d'application, elle, ne garde que le A sur fond d'accent : voir
+    ``app_icon()`` et ``tools/make_logo.py``."""
     suffix = "-blanc" if dark else ""
     for candidate in (size, 128, 256, 512, 64):
-        path = asset_path(f"logo-a-{candidate}{suffix}.png")
+        path = asset_path(f"mark-{candidate}{suffix}.png")
         if path.exists():
             pix = QPixmap(str(path))
             if candidate != size and not pix.isNull():
@@ -36,7 +39,7 @@ def logo_pixmap(size: int = 64, dark: bool = False) -> QPixmap:
 
 
 def app_icon() -> QIcon:
-    for name in ("modbusai.ico", "modbusai-icon-256.png", "logo-ad-256.png"):
+    for name in ("modbusai.ico", "modbusai-icon-256.png"):
         path = asset_path(name)
         if path.exists():
             return QIcon(str(path))

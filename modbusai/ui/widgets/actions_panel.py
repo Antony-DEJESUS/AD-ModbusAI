@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from modbusai.i18n import tr
 from modbusai.modbus.codec import DisplayMode, DisplayOptions, Radix
+from modbusai.ui.metrics import text_width
 from modbusai.ui.widgets.labels import section
 
 
@@ -28,7 +29,9 @@ class ActionsPanel(QFrame):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("card")  # carte de la charte (ui/style.py)
-        self.setFixedWidth(186)
+        # Largeur tirée des plus longs libellés du panneau : tient à 125 % comme
+        # à 150 % d'échelle, où une valeur en pixels ferait tronquer les textes.
+        self.setFixedWidth(text_width(self, "Reconnexion auto", "Période : 1000 ms", "Inversion Octets", extra=52))
 
         self.read_btn = QPushButton(tr("LECTURE"))
         self.read_btn.setProperty("variant", "primary")
@@ -44,7 +47,7 @@ class ActionsPanel(QFrame):
         self.stop_cycle_btn = QPushButton(tr("ARRET CYCLE"))
         self.stop_cycle_btn.setEnabled(False)
         self.cycle_period_ms = 1000
-        self._show_period()
+        self.cycle_btn.setText(tr("Période : {p0} ms").format(p0=self.cycle_period_ms))
 
         self.byte_swap = QCheckBox(tr("Inversion Octets"))
         self.word_swap = QCheckBox(tr("Inversion Mots"))
@@ -128,6 +131,34 @@ class ActionsPanel(QFrame):
     def _show_period(self) -> None:
         """La période est lisible sur le bouton : un bouton vide n'apprend rien."""
         self.cycle_btn.setText(tr("Période : {p0} ms").format(p0=self.cycle_period_ms))
+        self._fit_width()
+
+    def showEvent(self, event) -> None:  # noqa: N802 (API Qt)
+        super().showEvent(event)
+        self._fit_width()
+
+    def _fit_width(self) -> None:
+        if not hasattr(self, "display_mode"):  # appelé avant la fin de la construction
+            return
+        """Largeur calée sur le plus large des contrôles, police et feuille de
+        style comprises : rien à réajuster à 125 ou 150 % d'échelle Windows."""
+        widest = max(
+            w.sizeHint().width()
+            for w in (
+                self.read_btn,
+                self.write_btn,
+                self.cycle_btn,
+                self.stop_cycle_btn,
+                self.auto_reconnect,
+                self.cyclic,
+                self.byte_swap,
+                self.word_swap,
+                self.unsigned,
+                self.display_mode,
+            )
+        )
+        margins = self.layout().contentsMargins()
+        self.setFixedWidth(widest + margins.left() + margins.right() + 4)
 
 
 def _hsep() -> QFrame:

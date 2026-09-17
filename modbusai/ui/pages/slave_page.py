@@ -28,9 +28,12 @@ from modbusai.modbus.codec import Radix, format_int, parse_int
 from modbusai.modbus.slave import TABLE_SIZE, DataStore, HandledRequest, SlaveConfig, Table
 from modbusai.transport.netinfo import is_wildcard, local_ipv4_addresses
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
+from modbusai.ui.metrics import text_width, use_tabular_figures
 from modbusai.ui.palette import State, color
 from modbusai.ui.style import PAGE_MARGINS
+from modbusai.ui.widgets.labels import section
 from modbusai.ui.widgets.log_console import LogPanel
+from modbusai.ui.widgets.stat_tiles import StatTiles
 
 COLUMNS = 10
 FLASH_S = 2.0  # durée de l'éclairage vert d'une cellule lue ou écrite
@@ -261,14 +264,14 @@ class SlavePage(QWidget):
         self.link_protocol.addItems(["RTU", "TCP"])
         self.link_protocol.setCurrentText(self._protocol)
         self.link_protocol.setToolTip(tr("Protocole servi par le serveur esclave"))
-        self.link_btn = QPushButton(tr("LIAISON"))
+        self.link_btn = QPushButton(tr("CONFIGURER"))
         self.link_btn.setToolTip(tr("Port et paramètres du serveur esclave, indépendants de ceux du maître"))
         self.link_summary = QLabel()
         self.link_summary.setProperty("variant", "muted")
 
         # ---------------------------------------------------------- serveur
         self.slave_ids = QLineEdit("1")
-        self.slave_ids.setMaximumWidth(140)
+        self.slave_ids.setMaximumWidth(text_width(self, "1-5, 10, 20", extra=28))
         self.slave_ids.setToolTip(tr("Adresses servies, ex. « 1-5, 10 »"))
         self.delay = QSpinBox()
         self.delay.setRange(0, 5000)
@@ -289,35 +292,49 @@ class SlavePage(QWidget):
         self.stop_btn.setEnabled(False)
         self.rx_led = Led(tr("RX"), State.OK)
         self.tx_led = Led(tr("TX"), State.ERROR)
-        self.counters_label = QLabel(tr("Serveur arrêté"))
+        self.tiles = StatTiles(
+            (
+                ("requests", "REQUÊTES", None),
+                ("responses", "RÉPONSES", None),
+                ("writes", "ÉCRITURES", None),
+                ("exceptions", "EXCEPTIONS", State.WARN),
+                ("ignored", "IGNORÉES", State.WARN),
+                ("dropped", "PERDUES", State.ERROR),
+                ("corrupted", "CORROMPUES", State.ERROR),
+            )
+        )
         self.link_label = QLabel(tr("Serveur arrêté"))
         self.masters_label = QLabel(tr("Maîtres connectés : -"))
         self.masters_label.setToolTip(tr("Maîtres actuellement connectés au serveur (Modbus TCP)"))
 
+        # Deux bandeaux groupés plutôt qu'une seule ligne de treize contrôles :
+        # ce qu'on sert, par quelle liaison, puis ce qu'on simule.
         server_row = QHBoxLayout()
-        for label, w in (
-            ("Esclaves", self.slave_ids),
-            ("Délai", self.delay),
-            ("Pertes", self.drop),
-            ("CRC faux", self.corrupt),
-        ):
-            server_row.addWidget(QLabel(label))
-            server_row.addWidget(w)
+        server_row.setSpacing(8)
+        server_row.addWidget(section(tr("ESCLAVES")))
+        server_row.addWidget(self.slave_ids)
         server_row.addWidget(self.read_only)
-        server_row.addSpacing(12)
+        server_row.addWidget(_vsep())
+        server_row.addWidget(section(tr("LIAISON")))
         server_row.addWidget(self.link_protocol)
         server_row.addWidget(self.link_btn)
         server_row.addWidget(self.link_summary)
-        server_row.addSpacing(12)
+        server_row.addStretch(1)
         server_row.addWidget(self.start_btn)
         server_row.addWidget(self.stop_btn)
-        server_row.addSpacing(12)
+        server_row.addSpacing(8)
         server_row.addWidget(self.rx_led)
         server_row.addWidget(self.tx_led)
-        server_row.addStretch(1)
-        server_row.addWidget(self.counters_label)
 
         status_row = QHBoxLayout()
+        status_row.setSpacing(8)
+        status_row.addWidget(section(tr("DÉFAUTS SIMULÉS")))
+        for label, w in (("Délai", self.delay), ("Pertes", self.drop), ("CRC faux", self.corrupt)):
+            caption = QLabel(tr(label))
+            caption.setProperty("variant", "muted")
+            status_row.addWidget(caption)
+            status_row.addWidget(w)
+        status_row.addWidget(_vsep())
         status_row.addWidget(self.link_label, 1)
         status_row.addWidget(self.masters_label)
 
@@ -372,13 +389,14 @@ class SlavePage(QWidget):
         self.view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.view.verticalHeader().setDefaultSectionSize(22)
         self.view.setAlternatingRowColors(False)
+        use_tabular_figures(self.view)
 
         self.log_panel = LogPanel()
         self.log_enabled = QCheckBox(tr("Journaliser les requêtes"))
         self.log_enabled.setChecked(True)
         log_head = QHBoxLayout()
+        log_head.addWidget(self.tiles, 1)
         log_head.addWidget(self.log_enabled)
-        log_head.addStretch(1)
 
         bottom = QWidget()
         bl = QVBoxLayout(bottom)
@@ -525,7 +543,6 @@ class SlavePage(QWidget):
             w.setEnabled(False)
         where = listen_description(settings)
         self._show_link()
-        self.counters_label.setText(tr("Serveur actif"))
         self.link_label.setText(tr("Écoute : {p0}").format(p0=where))
         self.on_clients(())
         self.log_panel.console.log_info(
@@ -549,7 +566,6 @@ class SlavePage(QWidget):
             self.link_protocol,
         ):
             w.setEnabled(True)
-        self.counters_label.setText(tr("Serveur arrêté"))
         self.link_label.setText(tr("Serveur arrêté"))
         self.masters_label.setText(tr("Maîtres connectés : -"))
         self._clients = ()
@@ -608,10 +624,16 @@ class SlavePage(QWidget):
                 self._flash_timer.start(80)
         if result.response is not None:
             self.tx_led.blink()
-        self.counters_label.setText(
-            f"Requêtes {counters.requests}  |  réponses {counters.responses}  |  exceptions {counters.exceptions}  |  "
-            f"écritures {counters.writes}  |  ignorées {counters.ignored}  |  perdues {counters.dropped}  |  "
-            f"corrompues {counters.corrupted}"
+        self.tiles.set_values(
+            {
+                "requests": counters.requests,
+                "responses": counters.responses,
+                "writes": counters.writes,
+                "exceptions": counters.exceptions,
+                "ignored": counters.ignored,
+                "dropped": counters.dropped,
+                "corrupted": counters.corrupted,
+            }
         )
         if not self.log_enabled.isChecked():
             return
@@ -659,3 +681,10 @@ class SlavePage(QWidget):
         step = 10 if self.animation.currentData() == "inc10" else 1
         self.store.increment(self.model.table, start, count, step)
         self.model.refresh_if_changed()
+
+
+def _vsep() -> QFrame:
+    """Trait vertical de séparation entre deux groupes de réglages."""
+    sep = QFrame()
+    sep.setFrameShape(QFrame.Shape.VLine)
+    return sep

@@ -5,6 +5,33 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 0.3.4 - Marque AD, lisibilité à toutes les échelles, moins d'ambiguïté
+
+- Marque : le monogramme porte de nouveau les lettres « AD » dans l'interface
+  (bandeau, À propos). L'icône d'application, elle, garde le A seul sur fond
+  terracotta : à 16 pixels dans la barre des tâches, les lettres deviennent une
+  tache. `tools/make_logo.py --accent "#3E7CB1"` régénère marque et icône pour
+  un autre outil de la gamme : chaque outil, sa couleur.
+- L'À propos s'ouvre au premier démarrage, et une seule fois par version
+  (l'onglet Historique dit alors ce qui a changé). Un bouton À PROPOS est ajouté
+  au bandeau, à côté de THÈME.
+- Fin de l'ambiguïté entre les deux liaisons : le bandeau est étiqueté MAÎTRE et
+  ses boutons deviennent CONFIGURER / CONNECTER / DÉCONNECTER ; l'onglet du
+  serveur esclave a son propre groupe LIAISON avec un bouton CONFIGURER. On voit
+  d'un coup d'œil quel réglage appartient à quel rôle.
+- Largeurs calculées d'après le texte et non en pixels (`ui/metrics.py`) : plus
+  de libellé tronqué à 125 ou 150 % d'échelle Windows. Le panneau d'actions du
+  maître se cale tout seul sur son plus large contrôle.
+- Chiffres tabulaires dans les tableaux, les compteurs et le journal : les
+  colonnes ne dansent plus pendant un cycle.
+- Compteurs du serveur esclave en tuiles (valeur en gros, libellé discret,
+  couleur seulement quand ce n'est pas zéro) au lieu d'une ligne de texte, et
+  bandeau du serveur regroupé en ESCLAVES / LIAISON / DÉFAUTS SIMULÉS.
+- Grille du maître : colonnes Valeur, Hexa et Binaire côte à côte, au lieu d'une
+  seule valeur étirée sur toute la largeur.
+- États vides explicites dans le diagnostic, et la grille grise ses valeurs
+  périmées avec la couleur de la charte plutôt qu'un gris Qt en dur.
+
 ## 0.3.3 - AD - ModbusAI : marque, maître et esclave en parallèle, cellules animées
 
 - Le logiciel s'appelle « AD - ModbusAI » ; l'exécutable devient

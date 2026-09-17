@@ -1,4 +1,8 @@
-"""Bandeau supérieur : CONFIGURATION, protocole, résumé du port, CONNEXION / DECONNEXION, QUITTER."""
+"""Bandeau supérieur : la liaison du MAÎTRE.
+
+Le serveur esclave a la sienne, dans son onglet : les deux rôles peuvent
+tourner en parallèle sur deux ports. Les libellés le disent (« MAÎTRE » à
+gauche du bouton CONFIGURER) pour qu'on ne cherche pas ici le port du serveur."""
 
 from __future__ import annotations
 
@@ -16,6 +20,7 @@ class ConnectionBar(QFrame):
     configure_requested = Signal()
     connect_requested = Signal()
     disconnect_requested = Signal()
+    about_requested = Signal()
     quit_requested = Signal()
     theme_toggled = Signal()
     protocol_changed = Signal(str)  # "RTU" ou "TCP"
@@ -31,16 +36,23 @@ class ConnectionBar(QFrame):
         self.app_tag = QLabel(f"{tr('DIAGNOSTIC MODBUS')}  ·  v{__version__}")
         self.app_tag.setObjectName("appTag")
         self.state_dot = QLabel("●")
-        self.config_btn = QPushButton(tr("CONFIGURATION"))
+        self.role_label = QLabel(tr("MAÎTRE"))
+        self.role_label.setObjectName("appTag")
+        self.role_label.setToolTip(
+            tr("Ce bandeau ne règle que la liaison du maître ; le serveur esclave a la sienne, dans son onglet.")
+        )
+        self.config_btn = QPushButton(tr("CONFIGURER"))
+        self.config_btn.setToolTip(tr("Port et paramètres de la liaison du maître"))
         self.protocol = QComboBox()
         self.protocol.addItem(tr("RTU"))
         self.protocol.addItem(tr("TCP"))
         self.protocol.setToolTip(tr("RTU : liaison série RS-485 / RS-232. TCP : Modbus TCP sur réseau IP."))
         self.summary = QLabel(tr("Aucun port"))
         self.summary.setObjectName("linkSummary")
-        self.connect_btn = QPushButton(tr("CONNEXION"))
+        self.connect_btn = QPushButton(tr("CONNECTER"))
+        self.connect_btn.setToolTip(tr("Ouvre la liaison du maître"))
         self.connect_btn.setProperty("variant", "primary")
-        self.disconnect_btn = QPushButton(tr("DECONNEXION"))
+        self.disconnect_btn = QPushButton(tr("DÉCONNECTER"))
         self.disconnect_btn.setEnabled(False)
         self._connected = False
         self.language = QComboBox()
@@ -49,6 +61,8 @@ class ConnectionBar(QFrame):
         self.language.setToolTip(tr("Langue"))
         self.theme_btn = QPushButton(tr("THÈME"))
         self.theme_btn.setToolTip(tr("Basculer clair / sombre"))
+        self.about_btn = QPushButton(tr("À PROPOS"))
+        self.about_btn.setToolTip(tr("Logo, version, historique et mode d'emploi"))
         self.quit_btn = QPushButton(tr("QUITTER"))
         self.quit_btn.setProperty("variant", "quiet")
 
@@ -74,6 +88,7 @@ class ConnectionBar(QFrame):
         layout.addSpacing(6)
         layout.addWidget(_vsep())
         layout.addSpacing(6)
+        layout.addWidget(self.role_label)
         layout.addWidget(self.config_btn)
         layout.addWidget(self.protocol)
         layout.addWidget(link_w)
@@ -83,11 +98,13 @@ class ConnectionBar(QFrame):
         layout.addStretch(1)
         layout.addWidget(self.language)
         layout.addWidget(self.theme_btn)
+        layout.addWidget(self.about_btn)
         layout.addWidget(self.quit_btn)
 
         self.config_btn.clicked.connect(self.configure_requested)
         self.connect_btn.clicked.connect(self.connect_requested)
         self.disconnect_btn.clicked.connect(self.disconnect_requested)
+        self.about_btn.clicked.connect(self.about_requested)
         self.quit_btn.clicked.connect(self.quit_requested)
         self.theme_btn.clicked.connect(self.theme_toggled)
         self.protocol.currentTextChanged.connect(self.protocol_changed)

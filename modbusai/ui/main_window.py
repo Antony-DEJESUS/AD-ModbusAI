@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modbusai import APP_TITLE
+from modbusai import APP_TITLE, __version__
 from modbusai.analysis.campaign import CampaignSpec
 from modbusai.analysis.session import SessionStore
 from modbusai.i18n import current_language, set_language, tr
@@ -137,6 +137,7 @@ class MainWindow(QMainWindow):
         self.connection_bar.configure_requested.connect(self._configure)
         self.connection_bar.connect_requested.connect(self._connect)
         self.connection_bar.disconnect_requested.connect(self._disconnect)
+        self.connection_bar.about_requested.connect(self._show_about)
         self.connection_bar.quit_requested.connect(self.close)
         self.connection_bar.theme_toggled.connect(self._toggle_theme)
         self.connection_bar.protocol_changed.connect(self._on_protocol_changed)
@@ -210,6 +211,15 @@ class MainWindow(QMainWindow):
 
     def _show_about(self) -> None:
         AboutDialog(dark=(self._theme == "sombre"), parent=self).exec()
+
+    def show_about_on_first_run(self) -> None:
+        """Premier démarrage, et premier démarrage de chaque nouvelle version :
+        la pop-up présente l'outil et son historique. Appelée par ``app.run``."""
+        qs = QSettings()
+        if str(qs.value("ui/about_seen_version", "")) == __version__:
+            return
+        qs.setValue("ui/about_seen_version", __version__)
+        self._show_about()
 
     # ================================================================ thème
     def _apply_saved_theme(self) -> None:
@@ -355,7 +365,7 @@ class MainWindow(QMainWindow):
     # ================================================================= scan
     def _start_scan(self, _plan) -> None:
         if not self._connected:
-            self._set_status(tr("Le scan utilise la liaison du maître : cliquez d'abord sur CONNEXION."))
+            self._set_status(tr("Le scan utilise la liaison du maître : cliquez d'abord sur CONNECTER."))
             return
         if self.campaign_ctl.active:
             self._set_status(tr("Un test de diagnostic est en cours."))
