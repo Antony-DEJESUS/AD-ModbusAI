@@ -17,25 +17,27 @@ class SessionStore:
     def __len__(self) -> int:
         return len(self._observations)
 
-    def add_record(self, rec: ExchangeRecord, source: str = "maitre") -> Observation:
-        obs = Observation.from_record(rec, source)
+    def add_record(self, rec: ExchangeRecord, source: str = "maitre", label: str = "") -> Observation:
+        obs = Observation.from_record(rec, source, label)
         self._observations.append(obs)
         return obs
 
-    def add_transaction(self, tr: Transaction, settings: LinkSettings | None) -> Observation:
-        resp = tr.response
+    def add_transaction(self, transaction: Transaction, settings: LinkSettings | None) -> Observation:
+        resp = transaction.response
         obs = Observation(
-            timestamp=tr.timestamp,
-            slave_id=tr.slave_id,
-            function=tr.function,
-            status=tr.status,
-            response_time_ms=tr.response_time_ms,
+            timestamp=transaction.timestamp,
+            slave_id=transaction.slave_id,
+            function=transaction.function,
+            status=transaction.status,
+            response_time_ms=transaction.response_time_ms,
             source="espion",
-            exception_code=tr.exception_code,
+            exception_code=transaction.exception_code,
             error=None if resp is None else resp.detail,
             rx_chunks=len(resp.frame.chunks) if resp is not None else 0,
             rx_length=len(resp.frame) if resp is not None else 0,
             settings=settings,
+            tx_hex=transaction.request.frame.hex,
+            rx_hex="" if resp is None else resp.frame.hex,
         )
         self._observations.append(obs)
         return obs

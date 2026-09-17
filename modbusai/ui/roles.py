@@ -58,8 +58,11 @@ def tab_states(role: Role, connected: bool, busy_tab: Tab | None = None) -> dict
                 )
         return states
     if role is Role.MASTER and connected:
-        states[Tab.SNIFFER] = TabState(False, tr("Cliquez sur DECONNEXION pour passer en espion."))
-        states[Tab.SLAVE] = TabState(False, tr("Cliquez sur DECONNEXION pour lancer le serveur esclave."))
+        # Onglets accessibles : démarrer l'écoute ou le serveur ferme d'abord la
+        # liaison maître (un seul rôle tient le port), inutile de les verrouiller.
+        hint = tr("La liaison maître sera fermée automatiquement pour libérer le port.")
+        states[Tab.SNIFFER] = TabState(True, hint)
+        states[Tab.SLAVE] = TabState(True, hint)
     return states
 
 
@@ -73,10 +76,6 @@ def can_start(role: Role, connected: bool, wanted: Role, busy: bool) -> tuple[bo
         if role is Role.MASTER:
             return (not connected), tr("Déjà connecté.")
         return False, tr("Arrêtez d'abord l'espion ou le serveur esclave : le port est occupé.")
-    if role is Role.IDLE:
-        return True, ""
-    if role is Role.MASTER and connected:
-        return False, tr("Cliquez sur DECONNEXION avant de changer de rôle.")
-    if role is Role.MASTER:
-        return True, ""
+    if role in (Role.IDLE, Role.MASTER):
+        return True, ""  # la liaison maître est fermée avant de céder le port
     return False, tr("Un autre rôle occupe déjà le port.")

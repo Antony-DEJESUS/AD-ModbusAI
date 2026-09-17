@@ -159,3 +159,29 @@ def test_two_clients_served():
             b.close()
         time.sleep(0.1)
         assert slave.server.counters.active == 0
+
+
+def test_server_reports_connected_masters():
+    """Le serveur esclave doit dire combien de maîtres sont connectés et lesquels."""
+    seen: list[tuple[str, ...]] = []
+    with TcpSlaveThread(SlaveConfig(slave_ids={1})) as slave:
+        slave.server.on_clients = seen.append
+        first = TcpLink(slave.settings)
+        first.open()
+        second = TcpLink(slave.settings)
+        second.open()
+        deadline = time.monotonic() + 2
+        while len(slave.server.clients) < 2 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert len(slave.server.clients) == 2
+        assert all(name.startswith("127.0.0.1:") for name in slave.server.clients)
+        assert slave.server.counters.active == 2
+        first.close()
+        deadline = time.monotonic() + 2
+        while len(slave.server.clients) > 1 and time.monotonic() < deadline:
+            # une socket fermée n'est vue qu'à la prochaine lecture
+            ModbusMaster(second).execute(Request(1, FunctionCode.READ_HOLDING_REGISTERS, 0, 1))
+            time.sleep(0.05)
+        assert len(slave.server.clients) == 1
+        second.close()
+    assert seen and seen[-1] == ()  # la fermeture du serveur vide la liste

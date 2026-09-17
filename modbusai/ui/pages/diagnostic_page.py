@@ -14,6 +14,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
+    QCheckBox,
     QComboBox,
     QDialog,
     QFileDialog,
@@ -47,7 +48,15 @@ from modbusai.analysis.diagnostic import (
     SuggestedTest,
     analyse,
 )
-from modbusai.analysis.observations import SlaveStats
+from modbusai.analysis.observations import (
+    DEFAULT_SOURCES,
+    SOURCE_DEGRADED,
+    SOURCE_MASTER,
+    SOURCE_SCAN,
+    SOURCE_SNIFFER,
+    SOURCE_TEST,
+    SlaveStats,
+)
 from modbusai.analysis.report import build_report, suggested_filename
 from modbusai.analysis.session import SessionStore
 from modbusai.analysis.stress import StressPhase, StressReport, default_scenario
@@ -56,14 +65,16 @@ from modbusai.modbus.records import Request
 from modbusai.transport.records import LinkSettings
 from modbusai.ui.widgets.request_bar import RegisterType
 
-# Par défaut, le scan est exclu : ses adresses absentes ne sont pas des pannes à expliquer.
+# Par défaut on écarte le scan (ses adresses absentes ne sont pas des pannes à
+# expliquer) et les phases de torture qui provoquent volontairement des défauts.
 SOURCES = (
-    ("Maître, espion et tests", ["maitre", "espion", "test"]),
-    ("Toutes les sources (avec scan)", None),
-    ("Maître", ["maitre"]),
-    ("Espion", ["espion"]),
-    ("Scan", ["scan"]),
-    ("Tests", ["test"]),
+    ("Maître, espion et tests", list(DEFAULT_SOURCES)),
+    ("Toutes les sources (scan et torture inclus)", None),
+    ("Maître", [SOURCE_MASTER]),
+    ("Espion", [SOURCE_SNIFFER]),
+    ("Scan", [SOURCE_SCAN]),
+    ("Tests", [SOURCE_TEST]),
+    ("Torture et tests à liaison dégradée", [SOURCE_DEGRADED]),
 )
 
 
@@ -192,7 +203,7 @@ class DiagnosticPage(QWidget):
         self.run_btn = QPushButton(tr("LANCER CAMPAGNE"))
         self.stress_btn = QPushButton(tr("TEST DE TORTURE"))
         self.stress_btn.setToolTip(
-            "Enchaîne référence, rafale, trames longues, timeout serré (et vitesse réduite en RTU)"
+            tr("Enchaîne référence, rafale, trames longues, timeout serré (et vitesse réduite en RTU)")
         )
         self.cancel_btn = QPushButton(tr("ARRÊTER"))
         self.cancel_btn.setEnabled(False)
@@ -246,7 +257,10 @@ class DiagnosticPage(QWidget):
         self.help_btn = QPushButton(tr("AIDE"))
         self.sources = QComboBox()
         for label, value in SOURCES:
-            self.sources.addItem(label, value)
+            self.sources.addItem(tr(label), value)
+        self.with_trace = QCheckBox(tr("Trames dans l'export"))
+        self.with_trace.setChecked(True)
+        self.with_trace.setToolTip(tr("Joint au fichier txt toutes les trames échangées (TX / RX, horodatage, statut)"))
         self.count_label = QLabel(tr("0 observation"))
 
         top = QHBoxLayout()
@@ -254,6 +268,7 @@ class DiagnosticPage(QWidget):
         top.addWidget(self.clear_btn)
         top.addWidget(self.export_btn)
         top.addWidget(self.help_btn)
+        top.addWidget(self.with_trace)
         top.addSpacing(12)
         top.addWidget(QLabel(tr("Sources")))
         top.addWidget(self.sources)
@@ -603,8 +618,9 @@ class DiagnosticPage(QWidget):
             self._hypotheses,
             self._comparisons,
             self._stress_report,
-            observations_count=len(observations),
-            sources_label=self.sources.currentText(),
+            observations,
+            self.sources.currentText(),
+            include_trace=self.with_trace.isChecked(),
         )
         path, _ = QFileDialog.getSaveFileName(
             self, "Exporter le diagnostic", suggested_filename(), "Fichier texte (*.txt)"
@@ -628,7 +644,7 @@ class DiagnosticPage(QWidget):
             self._hypotheses,
             self._comparisons,
             self._stress_report,
-            len(observations),
+            observations,
             self.sources.currentText(),
         )
 

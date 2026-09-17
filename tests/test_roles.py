@@ -21,10 +21,12 @@ def test_sniffer_locks_everything_else():
     assert "ESPION" in st[Tab.SLAVE].reason
 
 
-def test_master_connected_locks_sniffer_and_slave():
+def test_master_connected_keeps_sniffer_and_slave_reachable():
+    """Maître connecté : on peut basculer, la liaison est fermée automatiquement."""
     st = tab_states(Role.MASTER, True)
-    assert enabled(st) == {Tab.MASTER, Tab.SCAN, Tab.DIAGNOSTIC}
-    assert "DECONNEXION" in st[Tab.SLAVE].reason
+    assert enabled(st) == set(Tab)
+    assert "fermée automatiquement" in st[Tab.SLAVE].reason
+    assert "fermée automatiquement" in st[Tab.SNIFFER].reason
 
 
 def test_busy_tab_locks_others():
@@ -37,7 +39,8 @@ def test_busy_tab_locks_others():
 def test_can_start():
     assert can_start(Role.IDLE, False, Role.MASTER, False) == (True, "")
     assert can_start(Role.IDLE, False, Role.SLAVE, False)[0]
-    assert not can_start(Role.MASTER, True, Role.SLAVE, False)[0]
+    assert can_start(Role.MASTER, True, Role.SLAVE, False)[0]  # la liaison maître est fermée d'abord
+    assert can_start(Role.MASTER, True, Role.SNIFFER, False)[0]
     assert not can_start(Role.SLAVE, False, Role.MASTER, False)[0]
     assert not can_start(Role.SNIFFER, False, Role.SLAVE, False)[0]
     assert not can_start(Role.IDLE, False, Role.SLAVE, True)[0]

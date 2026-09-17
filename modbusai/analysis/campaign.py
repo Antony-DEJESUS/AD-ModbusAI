@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+from modbusai.analysis.observations import SOURCE_TEST
 from modbusai.i18n import tr
 from modbusai.modbus.records import FunctionCode, Request
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings
@@ -28,6 +29,7 @@ class CampaignSpec:
     stopbits: float | None = None
     inter_frame_delay_ms: float | None = None
     label: str = "Campagne"
+    source: str = SOURCE_TEST  # SOURCE_DEGRADED pour une phase qui provoque volontairement des défauts
 
     @property
     def changes_link(self) -> bool:

@@ -11,6 +11,18 @@ from datetime import datetime
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus
 from modbusai.transport.records import LinkSettings
 
+# Vocabulaire des sources d'observation.
+SOURCE_MASTER = "maitre"
+SOURCE_SNIFFER = "espion"
+SOURCE_SCAN = "scan"
+SOURCE_TEST = "test"
+SOURCE_DEGRADED = "torture"
+"""Échanges d'une phase qui dégrade volontairement la liaison (vitesse réduite,
+timeout serré, trames hors gabarit) : leurs défauts sont provoqués, ils ne
+doivent pas nourrir les statistiques générales ni les hypothèses."""
+
+DEFAULT_SOURCES = (SOURCE_MASTER, SOURCE_SNIFFER, SOURCE_TEST)
+
 
 @dataclass(frozen=True, slots=True)
 class Observation:
@@ -29,9 +41,12 @@ class Observation:
     rx_length: int = 0
     tx_to_rx_echo: bool = False  # la réponse est l'écho exact de la requête (adaptateur)
     settings: LinkSettings | None = None
+    label: str = ""  # campagne ou phase de torture d'où vient l'échange
+    tx_hex: str = ""  # trame émise, pour l'export
+    rx_hex: str = ""  # trame reçue (vide si rien n'est revenu)
 
     @classmethod
-    def from_record(cls, rec: ExchangeRecord, source: str = "maitre") -> Observation:
+    def from_record(cls, rec: ExchangeRecord, source: str = "maitre", label: str = "") -> Observation:
         echo = rec.rx_frame is not None and rec.rx_frame.data == rec.tx_frame.data
         return cls(
             timestamp=rec.timestamp,
@@ -46,6 +61,9 @@ class Observation:
             rx_length=len(rec.rx_frame) if rec.rx_frame is not None else 0,
             tx_to_rx_echo=echo,
             settings=rec.settings,
+            label=label,
+            tx_hex=rec.tx_frame.hex,
+            rx_hex="" if rec.rx_frame is None else rec.rx_frame.hex,
         )
 
 

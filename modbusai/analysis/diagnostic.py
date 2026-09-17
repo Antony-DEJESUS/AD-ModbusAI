@@ -13,7 +13,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 
 from modbusai.analysis.campaign import CampaignSpec
-from modbusai.analysis.observations import Observation, SlaveStats
+from modbusai.analysis.observations import SOURCE_DEGRADED, SOURCE_TEST, Observation, SlaveStats
 from modbusai.i18n import tr
 from modbusai.modbus.exceptions import exception_label
 from modbusai.modbus.records import Request
@@ -234,6 +234,9 @@ class SuggestedTest:
             stopbits=self.stopbits,
             inter_frame_delay_ms=self.inter_frame_delay_ms,
             label=self.title,
+            # Une campagne qui modifie la liaison provoque ses propres défauts :
+            # son résultat se lit dans la comparaison, pas dans les statistiques.
+            source=SOURCE_DEGRADED if self.changes_link else SOURCE_TEST,
         )
 
 

@@ -47,13 +47,26 @@ def test_tabs_follow_roles(app):
         w._serial_settings = SerialSettings(bus.ports[0], inter_frame_delay_ms=20)
         try:
             assert enabled_tabs(w) == set(Tab)
-            # maître connecté : espion et esclave verrouillés
+            # maître connecté : tous les onglets restent atteignables
             w.connection_bar.connect_requested.emit()
             assert wait_until(app, lambda: w._connected)
-            assert enabled_tabs(w) == {Tab.MASTER, Tab.SCAN, Tab.DIAGNOSTIC}
-            assert "DECONNEXION" in w.tabs.tabToolTip(w._tab_index[Tab.SLAVE])
-            w.connection_bar.disconnect_requested.emit()
-            assert wait_until(app, lambda: not w._connected and w._role is Role.IDLE)
+            assert enabled_tabs(w) == set(Tab)
+            assert "libérer le port" in w.tabs.tabToolTip(w._tab_index[Tab.SLAVE])
+            # bascule directe vers le serveur esclave : la liaison maître est fermée seule
+            w.slave_page.start_requested.emit(SlaveConfig(slave_ids={1}))
+            assert wait_until(app, lambda: w.slave_page.serving)
+            assert not w._connected and w._role is Role.SLAVE
+            assert enabled_tabs(w) == {Tab.SLAVE}
+            w.slave_page.stop_requested.emit()
+            assert wait_until(app, lambda: not w.slave_page.serving and w._role is Role.IDLE)
+            # bascule directe vers l'espion depuis un maître connecté
+            w.connection_bar.connect_requested.emit()
+            assert wait_until(app, lambda: w._connected)
+            w.sniffer_page.start_requested.emit()
+            assert wait_until(app, lambda: w.sniffer_page.listening)
+            assert not w._connected and w._role is Role.SNIFFER
+            w.sniffer_page.stop_requested.emit()
+            assert wait_until(app, lambda: not w.sniffer_page.listening and w._role is Role.IDLE)
             assert enabled_tabs(w) == set(Tab)
             # serveur esclave : tout le reste verrouillé, et CONNEXION refusée
             w.slave_page.start_requested.emit(SlaveConfig(slave_ids={1}))

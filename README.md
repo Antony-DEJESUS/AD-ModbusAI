@@ -2,14 +2,15 @@
 
 Outil de diagnostic Modbus RTU / RS-485 et Modbus TCP pour le chantier (GTB,
 industriel), en français ou en anglais. Cinq onglets, un seul port à la fois :
+passer en espion ou en serveur esclave ferme la liaison maître automatiquement.
 
 | Onglet | Rôle |
 |---|---|
 | MAÎTRE | lecture / écriture façon Modbus Doctor, cyclique, reconnexion auto, formats 8 à 64 bits et flottants |
 | ESPION | écoute passive du bus RS-485 (aucune émission) : requêtes, réponses, temps, trames brutes, stats par esclave |
 | SCAN RÉSEAU | recherche des esclaves présents, identification FC43 / FC17, liaison au choix ou balayage des vitesses et parités |
-| DIAGNOSTIC | campagnes minutées, test de torture, statistiques, hypothèses classées avec légende et aide, tests pour départager, export txt |
-| SERVEUR ESCLAVE | simulateur d'esclave façon Mod_RSsim (RTU ou TCP) avec injection de défauts |
+| DIAGNOSTIC | campagnes minutées, test de torture expliqué phase par phase, statistiques, hypothèses classées avec légende et aide, tests pour départager, export txt avec toutes les trames |
+| SERVEUR ESCLAVE | simulateur d'esclave façon Mod_RSsim (RTU ou TCP) avec injection de défauts, adresse d'écoute et maîtres connectés |
 
 Version : barre de titre et pop-up À propos (`modbusai/__init__.py`), historique dans `CHANGELOG.md`.
 

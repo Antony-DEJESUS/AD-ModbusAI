@@ -24,10 +24,26 @@ from PySide6.QtWidgets import (
 from modbusai.i18n import tr
 from modbusai.modbus.codec import Radix, format_int, parse_int
 from modbusai.modbus.slave import TABLE_SIZE, DataStore, HandledRequest, SlaveConfig, Table
-from modbusai.transport.records import LinkSettings
+from modbusai.transport.netinfo import is_wildcard, local_ipv4_addresses
+from modbusai.transport.records import LinkSettings, TcpSettings
 from modbusai.ui.widgets.log_console import LogPanel
 
 COLUMNS = 10
+
+
+def listen_description(settings: LinkSettings) -> str:
+    """Adresse d'écoute en clair : 0.0.0.0 ne dit pas au technicien quelle
+    adresse donner au superviseur, on ajoute les adresses de la machine."""
+    if not isinstance(settings, TcpSettings):
+        return settings.summary()
+    if not is_wildcard(settings.host):
+        return f"{settings.host}:{settings.port}"
+    text = tr("toutes les interfaces, port {p0}").format(p0=settings.port)
+    addresses = local_ipv4_addresses()
+    if addresses:
+        joignable = ", ".join(f"{ip}:{settings.port}" for ip in addresses)
+        text += tr(" - joignable sur {p0}").format(p0=joignable)
+    return text
 
 
 class CellFormat(enum.Enum):
@@ -182,6 +198,8 @@ class SlavePage(QWidget):
         super().__init__(parent)
         self.store = store
         self._serving = False
+        self._tcp = False
+        self._clients: tuple[str, ...] = ()
         self.model = RegisterTableModel(store, self)
 
         # ---------------------------------------------------------- serveur
@@ -207,6 +225,9 @@ class SlavePage(QWidget):
         self.rx_led = Led(tr("RX"), "#2ea043")
         self.tx_led = Led(tr("TX"), "#e5534b")
         self.counters_label = QLabel(tr("Serveur arrêté"))
+        self.link_label = QLabel(tr("Serveur arrêté"))
+        self.masters_label = QLabel(tr("Maîtres connectés : -"))
+        self.masters_label.setToolTip(tr("Maîtres actuellement connectés au serveur (Modbus TCP)"))
 
         server_row = QHBoxLayout()
         for label, w in (
@@ -226,6 +247,10 @@ class SlavePage(QWidget):
         server_row.addWidget(self.tx_led)
         server_row.addStretch(1)
         server_row.addWidget(self.counters_label)
+
+        status_row = QHBoxLayout()
+        status_row.addWidget(self.link_label, 1)
+        status_row.addWidget(self.masters_label)
 
         # ------------------------------------------------------------ table
         self.table_kind = QComboBox()
@@ -304,6 +329,7 @@ class SlavePage(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addLayout(server_row)
+        layout.addLayout(status_row)
         layout.addWidget(sep)
         layout.addLayout(table_row)
         layout.addWidget(splitter, 1)
@@ -351,15 +377,21 @@ class SlavePage(QWidget):
 
     def on_started(self, settings: LinkSettings) -> None:
         self._serving = True
+        self._tcp = isinstance(settings, TcpSettings)
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
         for w in (self.slave_ids, self.delay, self.drop, self.corrupt, self.read_only):
             w.setEnabled(False)
-        self.counters_label.setText(tr("Serveur actif sur {p0}").format(p0=settings.summary()))
+        where = listen_description(settings)
+        self.counters_label.setText(tr("Serveur actif"))
+        self.link_label.setText(tr("Écoute : {p0}").format(p0=where))
+        self.on_clients(())
         self.log_panel.console.log_info(
-            f"Serveur esclave démarré sur {settings.summary()} - adresses {self.slave_ids.text()}"
+            tr("Serveur esclave démarré - écoute {p0} - adresses servies {p1}").format(
+                p0=where, p1=self.slave_ids.text()
+            )
         )
-        self.status_message.emit(tr("Serveur esclave actif sur {p0}").format(p0=settings.summary()))
+        self.status_message.emit(tr("Serveur esclave actif - écoute {p0}").format(p0=where))
 
     def on_stopped(self) -> None:
         self._serving = False
@@ -368,6 +400,9 @@ class SlavePage(QWidget):
         for w in (self.slave_ids, self.delay, self.drop, self.corrupt, self.read_only):
             w.setEnabled(True)
         self.counters_label.setText(tr("Serveur arrêté"))
+        self.link_label.setText(tr("Serveur arrêté"))
+        self.masters_label.setText(tr("Maîtres connectés : -"))
+        self._clients = ()
         self.log_panel.console.log_info(tr("Serveur esclave arrêté"))
 
     def set_available(self, available: bool) -> None:
@@ -377,8 +412,31 @@ class SlavePage(QWidget):
     def serving(self) -> bool:
         return self._serving
 
+    # ====================================================== maîtres connectés
+    def on_clients(self, clients: tuple[str, ...]) -> None:
+        """Liste des maîtres connectés (Modbus TCP). En RTU, le maître n'est pas
+        identifiable : le bus ne porte aucune notion de connexion."""
+        clients = tuple(clients)
+        if not self._tcp:
+            self.masters_label.setText(tr("Maître : non identifiable sur un bus RTU"))
+            self._clients = clients
+            return
+        for name in clients:
+            if name not in self._clients:
+                self.log_panel.console.log_info(tr("Maître connecté : {p0}").format(p0=name))
+        for name in self._clients:
+            if name not in clients:
+                self.log_panel.console.log_info(tr("Maître déconnecté : {p0}").format(p0=name))
+        self._clients = clients
+        if clients:
+            self.masters_label.setText(
+                tr("Maîtres connectés : {p0} ({p1})").format(p0=len(clients), p1=", ".join(clients))
+            )
+        else:
+            self.masters_label.setText(tr("Maîtres connectés : 0 (en attente)"))
+
     # ============================================================= trafic
-    def on_handled(self, result: HandledRequest, counters) -> None:
+    def on_handled(self, result: HandledRequest, counters, client: str = "") -> None:
         self.rx_led.blink()
         if result.response is not None:
             self.tx_led.blink()
@@ -394,7 +452,8 @@ class SlavePage(QWidget):
         resp = result.response.hex(" ").upper() if result.response is not None else "-"
         who = f"Esc {result.slave_id}" if result.slave_id is not None else "?"
         fc = f"FC{result.function:02X}" if result.function is not None else ""
-        line = f"{who:<8}{fc:<6} RX {req}  TX {resp}  {tr(result.kind)}" + (
+        origin = f"{client:<21} " if client else ""
+        line = f"{origin}{who:<8}{fc:<6} RX {req}  TX {resp}  {tr(result.kind)}" + (
             f" ({result.detail})" if result.detail else ""
         )
         if result.kind in ("réponse", "broadcast"):

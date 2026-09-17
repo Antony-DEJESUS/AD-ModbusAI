@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 
 from modbusai.analysis.campaign import CampaignSpec
-from modbusai.analysis.observations import SlaveStats
+from modbusai.analysis.observations import SOURCE_DEGRADED, SlaveStats
 from modbusai.i18n import tr
 from modbusai.modbus.records import FunctionCode, Request
 from modbusai.transport.records import LinkSettings, SerialSettings
@@ -78,13 +78,18 @@ def default_scenario(
             tr(
                 "Lecture de {p0} éléments : révèle une ligne bruitée (les longues trames ont plus de chances d'être corrompues)."
             ).format(p0=long_count),
-            CampaignSpec(replace(req, count=long_count), period_ms=200, label=tr("Trames longues")),
+            CampaignSpec(
+                replace(req, count=long_count),
+                period_ms=200,
+                label=tr("Trames longues"),
+                source=SOURCE_DEGRADED,
+            ),
         ),
         StressPhase(
             "tight",
             tr("Timeout serré"),
             tr("Timeout à 50 ms : mesure la part des réponses lentes."),
-            CampaignSpec(req, period_ms=200, timeout_ms=50.0, label=tr("Timeout serré")),
+            CampaignSpec(req, period_ms=200, timeout_ms=50.0, label=tr("Timeout serré"), source=SOURCE_DEGRADED),
         ),
     ]
     if other_slaves:
@@ -106,11 +111,64 @@ def default_scenario(
                 tr(
                     "9600 bauds : si les défauts disparaissent, la ligne (longueur, terminaisons) est en cause. L'esclave doit accepter 9600."
                 ),
-                CampaignSpec(req, period_ms=200, baudrate=9600, label=tr("9600 bauds")),
+                CampaignSpec(req, period_ms=200, baudrate=9600, label=tr("9600 bauds"), source=SOURCE_DEGRADED),
             )
         )
     share = max(10.0, total_duration_s / len(phases))
     return [replace(p, spec=replace(p.spec, duration_s=share, max_count=None)) for p in phases]
+
+
+def phase_reading(result: PhaseResult, ref: PhaseResult | None = None) -> str:
+    """Ce que les chiffres d'une phase veulent dire, en clair : une phase qui
+    dégrade volontairement la liaison produit des défauts qui ne sont pas ceux
+    du bus, il faut le dire plutôt que de laisser lire un taux brut."""
+    st = result.stats
+    if st.total == 0:
+        return tr("Aucune lecture : phase non concluante.")
+    ref_err = ref.error_ratio if ref is not None and ref.stats.total else 0.0
+    worse = result.error_ratio - ref_err
+    key = result.phase.key
+    if key == "ref":
+        if result.error_ratio < 0.02:
+            return tr("Comportement nominal : ces chiffres servent de référence aux autres phases.")
+        return tr("Des défauts apparaissent déjà au rythme lent : le problème n'a pas besoin d'être provoqué.")
+    if key == "burst":
+        if worse > 0.05 or (result.rt_avg or 0) > 1.5 * (ref.rt_avg or 1 if ref else 1):
+            return tr("Se dégrade à cadence maximale : esclave ou passerelle qui ne suit pas. Espacer les lectures.")
+        return tr("Tient la cadence maximale sans perte : ni l'esclave ni la passerelle ne saturent.")
+    if key == "long":
+        if st.exception_ratio > 0.8:
+            return tr(
+                "L'esclave refuse cette longueur et répond une exception : c'est la limite de sa table, pas un défaut réseau. Ces exceptions sont provoquées par le test, elles sont exclues des statistiques générales et des hypothèses."
+            )
+        if worse > 0.05 and (st.crc_error + st.bad_response) > 0:
+            return tr(
+                "Les trames longues sont corrompues plus souvent que les courtes : signature d'une ligne bruitée, mal terminée ou trop longue."
+            )
+        return tr("Les trames longues passent aussi bien que les courtes : la ligne transmet proprement.")
+    if key == "tight":
+        if st.answered == 0:
+            return tr(
+                "Aucune réponse sous 50 ms : timeout volontairement serré par le test. Retenir seulement que le temps de réponse de cet esclave dépasse 50 ms."
+            )
+        if st.timeout_ratio > 0.5:
+            return tr("Plus d'une réponse sur deux dépasse 50 ms : prévoir un timeout confortable en supervision.")
+        return tr("La quasi-totalité des réponses arrive en moins de 50 ms : marge confortable.")
+    if key == "multi":
+        if worse > 0.05:
+            return tr(
+                "Le bus souffre quand plusieurs esclaves répondent : polarisation, terminaison ou adresse en double."
+            )
+        return tr("L'alternance entre esclaves ne dégrade rien : le bus supporte plusieurs interlocuteurs.")
+    if key == "slow":
+        if st.answered == 0:
+            return tr(
+                "Aucune réponse à 9600 bauds : l'esclave n'est pas réglé sur cette vitesse. Phase non concluante — ces timeouts sont provoqués par le test, pas par le bus, et sont exclus des statistiques générales. Pour que ce test serve, régler l'esclave sur 9600 des deux côtés."
+            )
+        if ref_err > 0.05 and result.error_ratio < ref_err * 0.5:
+            return tr("Nettement mieux à vitesse réduite : la ligne est en cause (longueur, terminaisons, bruit).")
+        return tr("Pas mieux à vitesse réduite : le défaut, s'il existe, n'est pas lié à la vitesse.")
+    return ""
 
 
 def evaluate(results: list[PhaseResult]) -> StressReport:
@@ -185,7 +243,13 @@ def evaluate(results: list[PhaseResult]) -> StressReport:
     slow = by_key.get("slow")
     if slow and slow.stats.total:
         concl.append(tr("9600 bauds : {p0:.0f} % de défauts.").format(p0=100 * slow.error_ratio))
-        if ref_err > 0.05 and slow.error_ratio < ref_err * 0.5:
+        if slow.stats.answered == 0:
+            concl.append(
+                tr(
+                    "  -> aucune réponse : l'esclave n'est pas réglé sur 9600 bauds. Phase non concluante, ces timeouts ne viennent pas du bus."
+                )
+            )
+        elif ref_err > 0.05 and slow.error_ratio < ref_err * 0.5:
             scores["ligne"] = scores.get("ligne", 0) + 40
             concl.append(
                 "  -> nettement mieux à vitesse réduite : la ligne est en cause (longueur, terminaisons, bruit)."

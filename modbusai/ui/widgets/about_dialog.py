@@ -70,7 +70,7 @@ def manual_html() -> str:
         (
             tr("Blocages"),
             tr(
-                "Un seul rôle occupe le port à la fois : en espion ou en serveur esclave, les autres onglets sont grisés jusqu’à l’arrêt ; en maître connecté, il faut se déconnecter pour changer de rôle."
+                "Un seul rôle occupe le port à la fois : en espion ou en serveur esclave, les autres onglets sont grisés jusqu’à l’arrêt. Depuis un maître connecté, lancer l’écoute ou le serveur ferme la liaison maître tout seul."
             ),
         ),
     ]

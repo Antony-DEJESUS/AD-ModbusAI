@@ -78,12 +78,26 @@ def light_palette() -> QPalette:
     return p
 
 
+def theme_arrows(palette: QPalette) -> dict[str, str]:
+    """Chevrons des listes déroulantes et des compteurs, dans les couleurs du thème."""
+    from modbusai.ui.icons import chevron
+
+    text = palette.color(QPalette.ColorRole.Text)
+    off = palette.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text)
+    return {
+        "down": chevron(text, "down"),
+        "up": chevron(text, "up"),
+        "down_disabled": chevron(off, "down"),
+    }
+
+
 def apply_theme(app: QApplication, name: str) -> str:
     """Applique le thème (palette + feuille de style) et renvoie son nom normalisé."""
     from modbusai.ui.style import build_qss
 
     name = name if name in THEMES else "clair"
     app.setStyle("Fusion")
-    app.setPalette(dark_palette() if name == "sombre" else light_palette())
-    app.setStyleSheet(build_qss())
+    palette = dark_palette() if name == "sombre" else light_palette()
+    app.setPalette(palette)
+    app.setStyleSheet(build_qss(theme_arrows(palette)))
     return name

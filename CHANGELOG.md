@@ -5,6 +5,30 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 0.3.1 - Retours de chantier : flèches, bascule de rôle, trace des trames
+
+- Flèches des listes déroulantes et des compteurs de nouveau visibles : la
+  feuille de style masquait les indicateurs natifs, ils sont maintenant
+  dessinés à l'exécution dans la couleur du thème (`ui/icons.py`).
+- Bascule directe depuis un maître connecté vers l'espion ou le serveur
+  esclave : les onglets ne sont plus grisés, la liaison maître est fermée
+  automatiquement et le rôle démarre une fois le port rendu.
+- Les phases de torture qui provoquent volontairement des défauts (trames
+  longues, timeout serré, vitesse réduite) sont marquées comme telles : leurs
+  échanges n'entrent plus dans les statistiques ni dans les hypothèses. Une
+  campagne de test qui modifie la liaison est traitée de même. Corrige le
+  diagnostic « qualité de ligne » qui revenait après chaque torture alors que
+  les timeouts venaient de la phase 9600 bauds.
+- Le test de torture explique chaque phase dans le rapport : but, réglages,
+  chiffres et lecture en clair, dont « aucune réponse à 9600 bauds : l'esclave
+  n'est pas réglé sur cette vitesse, phase non concluante ».
+- L'export txt contient toutes les trames échangées (horodatage, source,
+  campagne ou phase, esclave, fonction, statut, temps de réponse, TX et RX) ;
+  case « Trames dans l'export » pour s'en passer.
+- Serveur esclave : nombre et adresses des maîtres connectés, adresse d'écoute
+  lisible (0.0.0.0 devient « toutes les interfaces, joignable sur 192.168.x.y »)
+  et journal préfixé par le maître à l'origine de chaque trame.
+
 ## 0.3.0 - Phase 3 : TCP, diagnostic autonome, torture, export, FR/EN, habillage
 
 - Modbus TCP en plus du RTU : choix du protocole dans le bandeau, dialogue de

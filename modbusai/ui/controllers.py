@@ -270,7 +270,9 @@ class CampaignController(QObject):
     def on_record(self, rec: ExchangeRecord, job: ExecuteJob) -> None:
         if not self._active or job.tag != self.TAG or self._spec is None:
             return
-        self.session.add_record(rec, source=self.TAG)
+        # La source distingue les échanges d'une phase qui provoque volontairement
+        # des défauts ; le libellé retient de quelle campagne / phase ils viennent.
+        self.session.add_record(rec, source=self._spec.source, label=self._spec.label)
         self._records.append(rec)
         self._emit_progress()
         if rec.status is ExchangeStatus.TRANSPORT_ERROR or self._spec.is_done(len(self._records), self._elapsed_s()):
@@ -304,9 +306,9 @@ class CampaignController(QObject):
         result: SlaveStats | None = None
         if self._records and self._spec is not None:
             slave_id = self._spec.request.slave_id
-            result = compute_stats(Observation.from_record(r, self.TAG) for r in self._records).get(
-                slave_id, SlaveStats(slave_id)
-            )
+            result = compute_stats(
+                Observation.from_record(r, self._spec.source, self._spec.label) for r in self._records
+            ).get(slave_id, SlaveStats(slave_id))
         if self._spec is not None and self._spec.changes_link and self._base_settings is not None:
             self._restoring = True
             self.reopen_requested.emit(self._base_settings)

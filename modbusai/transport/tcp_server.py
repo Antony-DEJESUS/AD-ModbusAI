@@ -16,6 +16,7 @@ from modbusai.transport.records import TransportError
 from modbusai.transport.tcp_link import _mbap_frame_length
 
 FrameHandler = Callable[[bytes, str], bytes | None]  # (trame, client) -> réponse
+ClientsWatcher = Callable[[tuple[str, ...]], None]  # appelé à chaque connexion / déconnexion
 
 
 @dataclass(slots=True)
@@ -29,15 +30,30 @@ class TcpServerCounters:
 
 
 class TcpServer:
-    def __init__(self, host: str, port: int, handler: FrameHandler, *, response_delay_ms: float = 0.0) -> None:
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        handler: FrameHandler,
+        *,
+        response_delay_ms: float = 0.0,
+        on_clients: ClientsWatcher | None = None,
+    ) -> None:
         self.host = host
         self.port = port
         self.handler = handler
         self.response_delay_ms = response_delay_ms
+        self.on_clients = on_clients
         self.counters = TcpServerCounters()
         self._listen: socket.socket | None = None
         self._sel = selectors.DefaultSelector()
         self._buffers: dict[socket.socket, bytes] = {}
+        self._names: dict[socket.socket, str] = {}  # maîtres connectés, dans l'ordre d'arrivée
+
+    @property
+    def clients(self) -> tuple[str, ...]:
+        """Maîtres actuellement connectés, « adresse:port »."""
+        return tuple(self._names.values())
 
     @property
     def bound_port(self) -> int:
@@ -93,10 +109,12 @@ class TcpServer:
             return
         conn.setblocking(False)
         self._buffers[conn] = b""
+        self._names[conn] = f"{addr[0]}:{addr[1]}"
         self._sel.register(conn, selectors.EVENT_READ)
         self.counters.connections += 1
         self.counters.active += 1
-        self.counters.clients.add(f"{addr[0]}:{addr[1]}")
+        self.counters.clients.add(self._names[conn])
+        self._notify_clients()
 
     def _read(self, conn: socket.socket) -> None:
         try:
@@ -142,10 +160,22 @@ class TcpServer:
             pass
         if conn in self._buffers:
             del self._buffers[conn]
+            self._names.pop(conn, None)
             self.counters.active = max(0, self.counters.active - 1)
+            self._notify_clients()
+
+    def _notify_clients(self) -> None:
+        if self.on_clients is not None:
+            self.on_clients(self.clients)
+
+    def _client_name(self, conn: socket.socket) -> str:
+        name = self._names.get(conn)
+        if name:
+            return name
+        return self._peer_name(conn)
 
     @staticmethod
-    def _client_name(conn: socket.socket) -> str:
+    def _peer_name(conn: socket.socket) -> str:
         try:
             host, port = conn.getpeername()[:2]
             return f"{host}:{port}"

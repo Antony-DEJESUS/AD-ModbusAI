@@ -22,7 +22,8 @@ modbusai/transport/            couche 1 : octets et instants, ignore Modbus
     framing.py                 RtuFramer : ByteChunk -> RawFrame par silence
     serial_link.py             SerialLink : open/close/send/receive/read_loop, allow_tx
     tcp_link.py                TcpLink : même interface, délimitation par la longueur MBAP
-    tcp_server.py              TcpServer multi-clients, rappel (trame, client) -> réponse
+    tcp_server.py              TcpServer multi-clients, rappel (trame, client) -> réponse, liste des clients
+    netinfo.py                 adresses IPv4 de la machine (0.0.0.0 -> « joignable sur … »)
 modbusai/modbus/               couche 2 : trames Modbus, ignore le port série et Qt
     records.py                 FunctionCode (01..06, 15, 16, 17, 43), Request, ExchangeStatus, ExchangeRecord
     crc.py                     crc16, append_crc, check_crc
@@ -34,14 +35,14 @@ modbusai/modbus/               couche 2 : trames Modbus, ignore le port série e
     slave.py                   DataStore (4 tables), SlaveConfig, SlaveHandler.handle (RTU) / handle_pdu (commun)
     tcp_slave.py               pont TcpServer <-> SlaveHandler (MBAP)
 modbusai/analysis/             couche 2 bis : exploitation des enregistrements, ignore série et Qt
-    observations.py            Observation (toutes sources), SlaveStats, compute_stats
+    observations.py            Observation (source, libellé, trames TX/RX), SlaveStats, compute_stats, vocabulaire des sources
     sniffer.py                 PassiveDecoder : RawFrame -> SniffedFrame / Transaction, split_merged
     scanner.py                 ScanPlan (liaison, balayage sélectif), ScanResult, classify, merge_attempts
     identification.py          décodage FC43 (DeviceIdentity) et FC17
     campaign.py                CampaignSpec : période, durée et / ou nombre, surcharges de liaison
-    stress.py                  scénario de torture (phases), evaluate() -> StressReport (orientation)
+    stress.py                  scénario de torture (phases), phase_reading(), evaluate() -> StressReport
     diagnostic.py              CATALOGUE (fiches d'hypothèses), Hypothesis, SuggestedTest, analyse(), légende
-    report.py                  rapport texte exportable
+    report.py                  rapport texte exportable (statistiques, hypothèses, phases détaillées, trace des trames)
     session.py                 SessionStore : historique des observations
 modbusai/ui/                   couche 3 : Qt uniquement
     main_window.py             bandeau, thème, langue, onglets, arbitrage du port, campagnes / torture
@@ -49,6 +50,7 @@ modbusai/ui/                   couche 3 : Qt uniquement
     workers.py                 ModbusWorker (maître RTU/TCP), SnifferWorker, SlaveWorker, TcpSlaveWorker
     controllers.py             ScanController, CampaignController (durée), StressController (phases)
     theme.py / style.py        palettes clair / sombre + feuille de style basée sur palette()
+    icons.py                   chevrons des listes déroulantes / compteurs, dessinés dans la couleur du thème
     resources.py               logo, icône, CHANGELOG (compatible PyInstaller)
     network_tools.py           ping système dans un thread, ouverture de ncpa.cpl (Windows)
     pages/                     master_page, sniffer_page, scan_page, diagnostic_page, slave_page
@@ -79,6 +81,10 @@ docs/                          propositions, plan et compte rendu de phase
   les onglets Maître, Scan et Diagnostic (qui ouvre la liaison lui-même si
   besoin) ; l'espion et le serveur esclave ont leur propre QThread. Les
   blocages entre onglets viennent de `tab_states()`, table pure et testée.
+  Un rôle actif (espion, serveur) ou une activité longue verrouille les autres
+  onglets ; un maître seulement connecté ne verrouille rien : démarrer l'espion
+  ou le serveur ferme la liaison maître (`_release_master_then`) et n'ouvre le
+  port qu'une fois la fermeture confirmée.
 
 ## Concepts clés
 
@@ -91,8 +97,16 @@ docs/                          propositions, plan et compte rendu de phase
   `BAD_RESPONSE` (CRC juste mais esclave / FC / longueur incohérents),
   `TRANSPORT_ERROR`. Embarque un instantané des `SerialSettings`.
 - **Observation** : réduction commune d'un ExchangeRecord (sources `maitre`,
-  `scan`, `test`) ou d'une Transaction espion (`espion`) ; `SessionStore` les
-  accumule, `compute_stats` en tire des `SlaveStats`, `analyse` des hypothèses.
+  `scan`, `test`, `torture`) ou d'une Transaction espion (`espion`), avec le
+  libellé de la campagne ou de la phase et les trames TX / RX pour l'export ;
+  `SessionStore` les accumule, `compute_stats` en tire des `SlaveStats`,
+  `analyse` des hypothèses.
+- **Défauts provoqués** : une phase ou une campagne qui dégrade volontairement
+  la liaison ou la requête (vitesse réduite, timeout serré, trames hors
+  gabarit) porte la source `torture` (`SOURCE_DEGRADED`). Ces échanges restent
+  visibles et exportés mais sortent des statistiques et des hypothèses : sinon
+  le test fabrique lui-même le défaut qu'il diagnostique. `DEFAULT_SOURCES` =
+  maître + espion + tests normaux.
 - **ExecuteJob** : requête + timeout optionnel + `tag` (source). La fenêtre
   route les retours du worker par tag : `maitre` vers la page, `scan` / `test`
   vers le contrôleur concerné.
@@ -116,6 +130,11 @@ docs/                          propositions, plan et compte rendu de phase
 - **Campagne** : `CampaignSpec` (période, durée et / ou nombre, surcharges) ;
   `CampaignController` l'exécute, `StressController` enchaîne les phases d'un
   scénario `stress.default_scenario` et `stress.evaluate` conclut.
+- **Rapport** : `build_report` écrit les statistiques, les hypothèses, les
+  tests exécutés, puis chaque phase de torture (but, réglages, chiffres et
+  `phase_reading` en clair) et enfin la trace de toutes les trames. Le fichier
+  doit se suffire à lui-même : il est relu sans l'application, éventuellement
+  par un assistant.
 - **Catalogue d'hypothèses** : `diagnostic.CATALOGUE` est la source unique des
   titres, résumés, déclencheurs, causes et confirmations ; les règles y
   puisent, l'aide et le rapport aussi. Ajouter une règle = ajouter sa fiche.

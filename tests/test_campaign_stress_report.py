@@ -1,10 +1,11 @@
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 from modbusai.analysis.campaign import CampaignSpec
 from modbusai.analysis.diagnostic import SuggestedTest, analyse
-from modbusai.analysis.observations import Observation, compute_stats
+from modbusai.analysis.observations import DEFAULT_SOURCES, Observation, compute_stats
 from modbusai.analysis.report import build_report, suggested_filename
-from modbusai.analysis.stress import PhaseResult, default_scenario, evaluate
+from modbusai.analysis.stress import PhaseResult, default_scenario, evaluate, phase_reading
 from modbusai.modbus.records import ExchangeStatus, FunctionCode, Request
 from modbusai.transport.records import Parity, SerialSettings, TcpSettings
 
@@ -101,13 +102,64 @@ def test_evaluate_orients_toward_line_and_healthy():
 
 
 def test_report_text():
-    st = compute_stats(obs(ExchangeStatus.OK, 20.0, n=8) + obs(ExchangeStatus.TIMEOUT, n=2))
+    observations = obs(ExchangeStatus.OK, 20.0, n=8) + obs(ExchangeStatus.TIMEOUT, n=2)
+    st = compute_stats(observations)
     hyps = analyse(st, [], SERIAL)
     phases = default_scenario(REQ, SERIAL)
     stress = evaluate(
         [phase_result(phases, k, obs(ExchangeStatus.OK, 20.0, n=10)) for k in ("ref", "burst", "long", "tight")]
     )
-    text = build_report(SERIAL, st, hyps, [], stress, observations_count=10, sources_label="test")
+    text = build_report(SERIAL, st, hyps, [], stress, observations, sources_label="test")
     assert "STATISTIQUES PAR ESCLAVE" in text and "HYPOTHÈSES" in text and "TEST DE TORTURE" in text
     assert "COM3 : 19200,8,None,One" in text and "Référence" in text
+    assert "Observations : 10" in text
+    # chaque phase est explicitée : but, réglages, chiffres, lecture
+    assert "Phase 1/4 : Référence" in text and "But      :" in text and "Lecture  :" in text
+    assert "[défauts provoqués]" in text  # trames longues et timeout serré
     assert suggested_filename().startswith("ModbusAI_diagnostic_") and suggested_filename().endswith(".txt")
+
+
+def test_report_traces_every_frame():
+    """L'export porte toutes les trames, avec la phase d'où elles viennent."""
+    observations = [
+        replace(o, label="Rafale", tx_hex="24 04 00 00 00 01 31 C6", rx_hex="24 04 02 00 FA 3D 8F")
+        for o in obs(ExchangeStatus.OK, 22.9, n=3)
+    ] + [replace(o, label="9600 bauds", source="torture") for o in obs(ExchangeStatus.TIMEOUT, n=2)]
+    text = build_report(SERIAL, compute_stats(observations), [], observations=observations)
+    assert "TRAMES ÉCHANGÉES (5 lignes)" in text
+    assert text.count("24 04 00 00 00 01 31 C6") == 3
+    assert "Rafale" in text and "9600 bauds" in text and "TIMEOUT" in text
+    trimmed = build_report(SERIAL, {}, [], observations=observations, max_trace=2)
+    assert "TRAMES ÉCHANGÉES (2 lignes)" in trimmed and "3 trames plus anciennes" in trimmed
+    assert "TRAMES" not in build_report(SERIAL, {}, [], observations=observations, include_trace=False)
+
+
+def test_provoked_phases_are_kept_out_of_general_statistics():
+    """Le 9600 bauds et les trames longues provoquent leurs propres défauts :
+    ils ne doivent pas ressortir en hypothèse « qualité de ligne »."""
+    phases = {p.key: p for p in default_scenario(REQ, SERIAL)}
+    assert phases["ref"].spec.source == "test" and phases["burst"].spec.source == "test"
+    assert phases["long"].spec.source == "torture"
+    assert phases["tight"].spec.source == "torture"
+    assert phases["slow"].spec.source == "torture"
+    assert "torture" not in DEFAULT_SOURCES
+
+
+def test_reduced_speed_without_answer_is_not_a_bus_fault():
+    """L'esclave reste à 19200 : les timeouts de la phase 9600 viennent du test,
+    pas du bus, et le rapport doit le dire."""
+    phases = default_scenario(REQ, SERIAL)
+    ref = phase_result(phases, "ref", obs(ExchangeStatus.OK, 22.0, n=50))
+    slow = phase_result(phases, "slow", obs(ExchangeStatus.TIMEOUT, n=42))
+    reading = phase_reading(slow, ref)
+    assert "n'est pas réglé sur cette vitesse" in reading and "non" in reading
+    report = evaluate([ref, slow])
+    assert any("pas réglé sur 9600" in c for c in report.conclusions)
+    assert "sains" in report.orientation
+
+
+def test_long_frames_refused_are_explained():
+    phases = default_scenario(REQ, SERIAL)
+    ref = phase_result(phases, "ref", obs(ExchangeStatus.OK, 22.0, n=50))
+    longp = phase_result(phases, "long", obs(ExchangeStatus.MODBUS_EXCEPTION, 12.5, n=218))
+    assert "limite de sa table" in phase_reading(longp, ref)

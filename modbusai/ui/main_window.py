@@ -42,6 +42,7 @@ from modbusai.ui.widgets.connection_bar import ConnectionBar
 from modbusai.ui.workers import ExecuteJob, ModbusWorker, SlaveWorker, SnifferWorker, TcpSlaveWorker
 
 RECONNECT_DELAY_MS = 1500
+PORT_RELEASE_DELAY_MS = 400  # temps laissé au système pour rendre le port avant qu'un autre rôle l'ouvre
 
 
 class MainWindow(QMainWindow):
@@ -60,6 +61,7 @@ class MainWindow(QMainWindow):
         self._connected = False
         self._manual_disconnect = False
         self._reconnect_pending = False
+        self._pending_after_disconnect = None  # action à lancer une fois le port rendu
         self._sniffer: SnifferWorker | None = None
         self._slave: SlaveWorker | None = None
         self.session = SessionStore()
@@ -285,6 +287,7 @@ class MainWindow(QMainWindow):
         self._set_status(tr("Status : déconnecté"))
         self.master_page.on_disconnected(manual=self._manual_disconnect)
         self._update_availability()
+        self._run_pending_after_disconnect()
 
     def _on_link_error(self, message: str) -> None:
         self._pending_after_connect = None
@@ -295,6 +298,9 @@ class MainWindow(QMainWindow):
         self._set_status(message)
         self.master_page.log_error(message)
         self._update_availability()
+        if self._pending_after_disconnect is not None:
+            self._run_pending_after_disconnect()
+            return
         self._maybe_schedule_reconnect()
 
     def _on_link_lost(self) -> None:
@@ -304,6 +310,23 @@ class MainWindow(QMainWindow):
         self.connection_bar.set_connected(False)
         self._cmd_close.emit()
         self._maybe_schedule_reconnect()
+
+    def _release_master_then(self, action) -> None:
+        """Ferme la liaison maître, puis exécute ``action`` : un seul rôle tient le
+        port et Windows ne le rend pas instantanément."""
+        self._manual_disconnect = True
+        self._reconnect_pending = False
+        self._pending_after_disconnect = action
+        self.scan_ctl.cancel()
+        self.stress_ctl.cancel()
+        self.campaign_ctl.cancel()
+        self._set_status(tr("Fermeture de la liaison maître pour libérer le port…"))
+        self._cmd_close.emit()
+
+    def _run_pending_after_disconnect(self) -> None:
+        pending, self._pending_after_disconnect = self._pending_after_disconnect, None
+        if pending is not None:
+            QTimer.singleShot(PORT_RELEASE_DELAY_MS, pending)
 
     def _maybe_schedule_reconnect(self) -> None:
         if not self.master_page.auto_reconnect or self._reconnect_pending or self._manual_disconnect:
@@ -420,9 +443,9 @@ class MainWindow(QMainWindow):
         if self._role is Role.SLAVE:
             self._set_status(tr("Arrêtez le serveur esclave avant de lancer l'écoute."))
             return
-        if self._role is Role.MASTER:
-            self._manual_disconnect = True
-            self._cmd_close.emit()
+        if self._connected or self._role is Role.MASTER:
+            self._release_master_then(self._start_sniffer)
+            return
         self._role = Role.SNIFFER
         self._sniffer = SnifferWorker(self._serial_settings, self)
         s = self._sniffer
@@ -463,9 +486,9 @@ class MainWindow(QMainWindow):
         if self._role is Role.SNIFFER:
             self._set_status(tr("Arrêtez l'écoute avant de lancer le serveur esclave."))
             return
-        if self._role is Role.MASTER:
-            self._manual_disconnect = True
-            self._cmd_close.emit()
+        if self._connected or self._role is Role.MASTER:
+            self._release_master_then(lambda: self._start_slave(config))
+            return
         self._role = Role.SLAVE
         if self._is_tcp:
             # En serveur, l'hôte configuré est l'adresse d'écoute ; vide = toutes les interfaces
@@ -476,7 +499,9 @@ class MainWindow(QMainWindow):
         w = self._slave
         w.started_serving.connect(self.slave_page.on_started)
         w.link_error.connect(self._on_slave_error)
-        w.handled.connect(lambda result: self.slave_page.on_handled(result, w.handler.counters))
+        w.handled.connect(lambda result, client: self.slave_page.on_handled(result, w.handler.counters, client))
+        if isinstance(w, TcpSlaveWorker):
+            w.clients_changed.connect(self.slave_page.on_clients)
         w.store_changed.connect(self.slave_page.on_store_changed)
         w.stopped.connect(self._on_slave_stopped)
         w.start()
@@ -519,7 +544,7 @@ class MainWindow(QMainWindow):
             self.tabs.setTabToolTip(idx, st.reason)
         self.scan_page.set_tcp(self._is_tcp)
         self.sniffer_page.set_available(
-            port_free and not self._is_tcp, "Écoute passive disponible en RTU uniquement" if self._is_tcp else ""
+            port_free and not self._is_tcp, tr("Écoute passive disponible en RTU uniquement") if self._is_tcp else ""
         )
         self.slave_page.set_available(port_free)
         self.scan_page.set_available(master_ok)

@@ -159,7 +159,7 @@ class SlaveWorker(QThread):
     started_serving = Signal(object)  # SerialSettings
     stopped = Signal()
     link_error = Signal(str)
-    handled = Signal(object)  # HandledRequest
+    handled = Signal(object, str)  # HandledRequest, maître ("" en RTU : non identifiable)
     store_changed = Signal()  # une écriture a modifié la table
 
     def __init__(
@@ -191,7 +191,7 @@ class SlaveWorker(QThread):
                     if delay > 0:
                         time.sleep(delay / 1000)
                     link.send(result.response)
-                self.handled.emit(result)
+                self.handled.emit(result, "")
                 if store.version != version:
                     self.store_changed.emit()
         except TransportError as exc:
@@ -207,7 +207,8 @@ class TcpSlaveWorker(QThread):
     started_serving = Signal(object)  # TcpSettings (hôte d'écoute, port)
     stopped = Signal()
     link_error = Signal(str)
-    handled = Signal(object)  # HandledRequest
+    handled = Signal(object, str)  # HandledRequest, maître « adresse:port »
+    clients_changed = Signal(object)  # tuple des maîtres connectés
     store_changed = Signal()
 
     def __init__(
@@ -226,8 +227,8 @@ class TcpSlaveWorker(QThread):
         store = self.handler.store
         version = [store.version]
 
-        def on_handled(result, _client: str) -> None:
-            self.handled.emit(result)
+        def on_handled(result, client: str) -> None:
+            self.handled.emit(result, client)
             if store.version != version[0]:
                 version[0] = store.version
                 self.store_changed.emit()
@@ -238,6 +239,7 @@ class TcpSlaveWorker(QThread):
             self.settings.port,
             make_tcp_frame_handler(self.handler, on_handled),
             response_delay_ms=self.handler.config.response_delay_ms,
+            on_clients=self.clients_changed.emit,
         )
         try:
             server.open()

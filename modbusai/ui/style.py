@@ -9,6 +9,28 @@ import platform
 RADIUS = 6
 
 
+def _arrow_rules(arrows: dict[str, str] | None) -> str:
+    """Indicateurs des listes déroulantes et des compteurs : la feuille de style
+    remplace le fond natif, il faut redessiner les flèches nous-mêmes."""
+    arrows = arrows or {}
+    down, up, off = arrows.get("down", ""), arrows.get("up", ""), arrows.get("down_disabled", "")
+    if not down or not up:
+        return ""
+    rules = [
+        f"    QComboBox::down-arrow {{ image: url({down}); width: 12px; height: 12px; }}",
+        "    QComboBox::down-arrow:on { top: 1px; }",
+        f"    QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{ image: url({up}); width: 11px; height: 11px; }}",
+        f"    QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{ image: url({down}); width: 11px; height: 11px; }}",
+    ]
+    if off:
+        rules.append(f"    QComboBox::down-arrow:disabled {{ image: url({off}); }}")
+        rules.append(
+            f"    QSpinBox::up-arrow:disabled, QSpinBox::down-arrow:disabled,"
+            f" QDoubleSpinBox::up-arrow:disabled, QDoubleSpinBox::down-arrow:disabled {{ image: url({off}); }}"
+        )
+    return "\n".join(rules)
+
+
 def base_font_family() -> str:
     system = platform.system()
     if system == "Windows":
@@ -18,7 +40,10 @@ def base_font_family() -> str:
     return '"Inter", "Noto Sans", "DejaVu Sans", Arial'
 
 
-def build_qss() -> str:
+def build_qss(arrows: dict[str, str] | None = None) -> str:
+    """``arrows`` : chemins des chevrons (``down``, ``up``, ``down_disabled``),
+    dessinés par ``ui.icons`` dans la couleur du thème. Absents, on laisse le
+    style natif faire ce qu'il peut."""
     r = RADIUS
     return f"""
     QWidget {{ font-family: {base_font_family()}; font-size: 10pt; }}
@@ -42,12 +67,15 @@ def build_qss() -> str:
         border: 1px solid palette(highlight);
     }}
     QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QComboBox:disabled {{ color: palette(mid); }}
-    QComboBox::drop-down {{ border: none; width: 22px; }}
+    QComboBox::drop-down {{ border: none; width: 22px; subcontrol-origin: padding; subcontrol-position: center right; }}
+{_arrow_rules(arrows)}
     QComboBox QAbstractItemView {{
         background: palette(base); border: 1px solid palette(mid); border-radius: {r}px;
         selection-background-color: palette(highlight); selection-color: palette(highlighted-text);
     }}
-    QSpinBox::up-button, QSpinBox::down-button, QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{ width: 16px; border: none; }}
+    QSpinBox::up-button, QSpinBox::down-button, QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
+        width: 16px; border: none; background: transparent;
+    }}
 
     QGroupBox {{
         border: 1px solid palette(mid); border-radius: {r + 2}px; margin-top: 14px; padding: 10px 6px 6px 6px;
