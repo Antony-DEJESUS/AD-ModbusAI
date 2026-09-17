@@ -71,7 +71,14 @@ class TcpServer:
         if self._listen is None:
             raise TransportError("Serveur non ouvert")
         while not stop.is_set():
-            for key, _mask in self._sel.select(timeout=0.05):
+            try:
+                ready = self._sel.select(timeout=0.05)
+            except (OSError, ValueError) as exc:
+                # Socket fermée par close() depuis un autre thread (WinError 10022 sous Windows) : on s'arrête
+                if self._listen is None or stop.is_set():
+                    return
+                raise TransportError("Serveur TCP : socket d'écoute invalide") from exc
+            for key, _mask in ready:
                 if key.fileobj is self._listen:
                     self._accept()
                 else:
