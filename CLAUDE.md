@@ -66,7 +66,8 @@ assets/                        marque mark-*.png (A + « AD »), icône .ico (A 
 tools/make_logo.py             régénère marque et icône, --accent donne sa couleur à chaque outil de la gamme
 tests/                         pytest ; fake_slave.py (esclave sur pty), virtual_bus.py (bus RS-485 virtuel)
 packaging/modbusai.spec        PyInstaller, exécutable unique ModbusAI_v<version>, ressources embarquées
-docs/                          propositions, plan et compte rendu de phase
+docs/                          propositions, plan, compte rendu de phase, mode d'emploi PDF
+docs/manuel/                   captures.py (captures sur bus virtuel) et build_manuel.py (HTML -> PDF via Chromium)
 ```
 
 ## Règles de dépendance (vérifiables au grep)

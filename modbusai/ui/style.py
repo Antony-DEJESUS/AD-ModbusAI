@@ -154,6 +154,9 @@ def build_qss(tokens: Tokens | None = None, arrows: dict[str, str] | None = None
     }}
     QListWidget::item {{ padding: 5px 6px; border-radius: {r - 2}px; }}
     QListWidget::item:hover:!selected {{ background: {t.hover}; }}
+    QListWidget::item:selected {{
+        background: {t.accent_soft}; color: {t.text}; border-left: 3px solid {t.accent};
+    }}
     QHeaderView {{ background: {t.window}; }}
     QHeaderView::section {{
         background: {t.window}; color: {t.muted};

@@ -174,8 +174,9 @@ class ScanPage(QWidget):
         params_layout.addStretch(1)
         params = QGroupBox(tr("Paramètres du scan"))
         params.setLayout(params_layout)
-        params.setMinimumWidth(text_width(self, "Vitesses   9600  19200  38400  57600", extra=60))
-        params.setMaximumWidth(text_width(self, "Vitesses   9600  19200  38400  57600", extra=140))
+        widest = ("Vitesses   9600  19200  38400  57600", "Identifier les équipements (FC43, FC17)")
+        params.setMinimumWidth(text_width(self, *widest, extra=80))
+        params.setMaximumWidth(text_width(self, *widest, extra=160))
 
         self.start_btn = QPushButton(tr("LANCER SCAN"))
         self.start_btn.setProperty("variant", "primary")

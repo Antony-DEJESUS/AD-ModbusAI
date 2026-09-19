@@ -5,6 +5,19 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 1.0.1 - Mode d'emploi et corrections d'affichage
+
+- **Mode d'emploi complet** en PDF (`docs/AD-ModbusAI_Mode_d_emploi_v1.0.1.pdf`),
+  32 pages : installation, chaque onglet, arbitrage des ports, câblage RS-485,
+  dépannage, catalogue des hypothèses et annexes. Il est engendré depuis le
+  code par `docs/manuel/build_manuel.py` (captures d'écran sur bus virtuel par
+  `docs/manuel/captures.py`), donc toujours aligné sur les règles réelles.
+- Correction : l'hypothèse sélectionnée dans l'onglet Diagnostic était
+  invisible (texte clair sur fond clair) ; elle est maintenant surlignée avec
+  un filet d'accent.
+- Correction : la zone des paramètres du scan se dimensionne d'après son texte
+  le plus large au lieu d'une largeur fixe.
+
 ## 1.0.0 - Première version complète
 
 Les trois phases sont livrées et validées sur chantier (TC903 Schneider,
