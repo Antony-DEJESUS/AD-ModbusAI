@@ -15,8 +15,8 @@ from PySide6.QtCore import QCoreApplication  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from modbusai.modbus.slave import SlaveConfig, Table  # noqa: E402
+from modbusai.roles import Tab  # noqa: E402
 from modbusai.transport.records import SerialSettings  # noqa: E402
-from modbusai.ui.roles import Tab  # noqa: E402
 from tests.virtual_bus import VirtualBus  # noqa: E402
 
 
@@ -117,8 +117,8 @@ def test_long_activity_locks_only_the_master_tabs(app):
 
 def test_sniffer_takes_over_the_master_port(app):
     """Même port que le maître : l'écoute ferme la liaison maître d'elle-même."""
+    from modbusai.roles import Role
     from modbusai.ui.main_window import MainWindow
-    from modbusai.ui.roles import Role
 
     with VirtualBus(2) as bus:
         w = MainWindow()

@@ -1,4 +1,4 @@
-"""Rôles et arbitrage des ports.
+"""Rôles et arbitrage des ports : qui tient quelle ressource.
 
 Un port ne peut servir qu'à un rôle à la fois, mais rien n'interdit de faire
 tourner plusieurs rôles en parallèle sur des ports différents : maître sur
@@ -6,7 +6,8 @@ COM3 et serveur esclave sur COM7, par exemple, pour se répondre à soi-même ou
 simuler un équipement pendant qu'on interroge le vrai.
 
 Table pure (sans Qt) : elle dit quels onglets sont accessibles et si un rôle
-peut démarrer sur un port donné. Testable sans interface ; la fenêtre applique.
+peut démarrer sur un port donné. Testable sans interface ; la fenêtre et le
+serveur MCP l'appliquent, d'où sa place hors de la couche ``ui``.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 [project]
 name = "modbusai"
-version = "1.0.1"
+version = "1.1.0"
 description = "Outil de diagnostic Modbus RTU / RS-485"
 requires-python = ">=3.11"
 
@@ -23,5 +23,6 @@ select = ["E", "F", "I", "UP", "B"]
 "modbusai/i18n_en.py" = ["E501"]  # dictionnaire de traduction
 "modbusai/ui/pages/diagnostic_page.py" = ["E501"]  # phrases d'aide en français
 "modbusai/ui/style.py" = ["E501"]  # feuille de style
+"modbusai/mcp/tools.py" = ["E501"]  # descriptions des outils, lues par le modèle
 "docs/manuel/build_manuel.py" = ["E501"]  # prose du mode d'emploi
 "modbusai/ui/widgets/about_dialog.py" = ["E501"]  # mode d'emploi

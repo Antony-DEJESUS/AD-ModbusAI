@@ -29,11 +29,11 @@ app = QApplication([])
 from modbusai.modbus.master import RtuMaster  # noqa: E402
 from modbusai.modbus.records import FunctionCode, Request  # noqa: E402
 from modbusai.modbus.slave import SlaveConfig, Table  # noqa: E402
+from modbusai.roles import Tab  # noqa: E402
 from modbusai.transport.records import SerialSettings, TcpSettings  # noqa: E402
 from modbusai.transport.serial_link import SerialLink  # noqa: E402
 from modbusai.ui.main_window import MainWindow  # noqa: E402
 from modbusai.ui.pages.diagnostic_page import HypothesisHelpDialog  # noqa: E402
-from modbusai.ui.roles import Tab  # noqa: E402
 from modbusai.ui.theme import apply_theme  # noqa: E402
 from modbusai.ui.widgets.about_dialog import AboutDialog  # noqa: E402
 from modbusai.ui.widgets.config_dialog import ConfigDialog  # noqa: E402

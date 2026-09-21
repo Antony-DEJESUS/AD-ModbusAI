@@ -27,7 +27,7 @@ def dynamic_keys() -> set[str]:
     from modbusai.modbus.codec import DisplayMode, Radix
     from modbusai.modbus.exceptions import EXCEPTION_LABELS
     from modbusai.modbus.slave import Table
-    from modbusai.ui.roles import Role, Tab
+    from modbusai.roles import Role, Tab
 
     keys = {e.value for e in DisplayMode} | {e.value for e in Radix} | {t.label for t in Table}
     keys |= (

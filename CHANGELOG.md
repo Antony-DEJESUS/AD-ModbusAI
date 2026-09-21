@@ -5,6 +5,32 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 1.1.0 - Serveur MCP : le bus vu comme des outils
+
+- **Serveur MCP** (`python -m modbusai.mcp`, exécutable `AD-ModbusAI-MCP`) :
+  un assistant comme Claude Code appelle directement les outils du bus au lieu
+  de lire un rapport collé à la main. Vingt et un outils : ouvrir la liaison,
+  lire, écrire, scanner, identifier, écouter le bus, lancer une campagne ou un
+  test de torture, analyser, produire le rapport, piloter le serveur esclave
+  simulé. La boucle « hypothèse, test qui départage, nouvelle hypothèse » se
+  fait sans quitter la conversation.
+- **Deux transports.** Sans option, le serveur parle par l'entrée standard :
+  c'est le mode local, Claude Code le lance lui-même sur le poste branché au
+  bus. Avec `--http`, il écoute sur une adresse : c'est le mode à distance,
+  prévu pour un réseau privé de type Tailscale, le poste reste sur site et on
+  diagnostique depuis le bureau.
+- **Lecture seule par défaut.** Écrire dans un automate en exploitation se
+  décide au lancement (`--ecriture`), pas au fil de la conversation : sans
+  l'option, les outils d'écriture ne sont même pas proposés. L'écoute HTTP est
+  liée à 127.0.0.1 tant qu'on ne demande pas autre chose, accepte un jeton
+  partagé (`--jeton`) et refuse les requêtes venues d'un navigateur.
+- La pile MCP est écrite en propre, comme la pile RTU : aucune dépendance
+  nouvelle, et l'exécutable du serveur n'embarque pas Qt.
+- `modbusai/roles.py` quitte la couche `ui` : l'arbitrage « un port, un rôle »
+  vaut pour la fenêtre comme pour le serveur MCP.
+- L'exécutable est maintenant double : l'application reste fenêtrée, le serveur
+  MCP est en console, faute de quoi il n'aurait ni entrée ni sortie standard.
+
 ## 1.0.1 - Mode d'emploi et corrections d'affichage
 
 - **Mode d'emploi complet** en PDF (`docs/AD-ModbusAI_Mode_d_emploi_v1.0.1.pdf`),

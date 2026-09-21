@@ -26,6 +26,7 @@ from modbusai.analysis.session import SessionStore
 from modbusai.i18n import current_language, set_language, tr
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus
 from modbusai.modbus.slave import DataStore, SlaveConfig
+from modbusai.roles import Occupancy, Role, Tab, can_start, port_key, tab_states
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
 from modbusai.ui.controllers import CampaignController, ScanController, StressController
 from modbusai.ui.iconography import refresh_all as refresh_icons
@@ -36,7 +37,6 @@ from modbusai.ui.pages.scan_page import ScanPage
 from modbusai.ui.pages.slave_page import SlavePage
 from modbusai.ui.pages.sniffer_page import SnifferPage
 from modbusai.ui.resources import app_icon
-from modbusai.ui.roles import Occupancy, Role, Tab, can_start, port_key, tab_states
 from modbusai.ui.theme import THEMES, apply_theme, system_theme
 from modbusai.ui.widgets.about_dialog import AUTHOR, AboutDialog
 from modbusai.ui.widgets.config_dialog import ConfigDialog

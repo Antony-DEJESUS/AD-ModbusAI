@@ -1,7 +1,7 @@
 """Arbitrage des ports : plusieurs rôles cohabitent tant qu'ils visent des ports différents."""
 
+from modbusai.roles import Occupancy, Role, Tab, can_start, port_key, tab_states
 from modbusai.transport.records import SerialSettings, TcpSettings
-from modbusai.ui.roles import Occupancy, Role, Tab, can_start, port_key, tab_states
 
 
 def enabled(states):

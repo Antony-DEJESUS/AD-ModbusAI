@@ -5,8 +5,9 @@ cible, PySide6, pyserial). Phase 1 : page lecture / écriture façon Modbus
 Doctor. Phase 2 : onglets Espion, Scan réseau, Diagnostic, Serveur esclave,
 thème clair / sombre, 64 bits. Phase 3 : Modbus TCP, diagnostic autonome avec
 campagnes minutées et test de torture, export txt, blocages entre onglets,
-français / anglais, charte graphique AD. Le projet repose sur la
-séparation en couches ci-dessous : ne pas la contourner.
+français / anglais, charte graphique AD. Phase 4 : serveur MCP, le bus exposé
+comme un jeu d'outils pour un assistant, en local ou par un réseau privé. Le
+projet repose sur la séparation en couches ci-dessous : ne pas la contourner.
 
 ## Arborescence
 
@@ -16,6 +17,7 @@ modbusai/__init__.py           __version__, APP_NAME, APP_TITLE (source unique d
 modbusai/app.py                QApplication, langue au démarrage, recréation de la fenêtre
 modbusai/i18n.py               tr(), set_language : module feuille sans Qt, le français est la clé
 modbusai/i18n_en.py            dictionnaire français -> anglais
+modbusai/roles.py              Role, Tab, port_key(), Occupancy, can_start(), tab_states() : arbitrage des ports
 modbusai/transport/            couche 1 : octets et instants, ignore Modbus
     records.py                 SerialSettings, TcpSettings, LinkSettings, ByteChunk, RawFrame, erreurs
     ports.py                   list_serial_ports()
@@ -44,9 +46,16 @@ modbusai/analysis/             couche 2 bis : exploitation des enregistrements, 
     diagnostic.py              CATALOGUE (fiches d'hypothèses), Hypothesis, SuggestedTest, analyse(), légende
     report.py                  rapport texte exportable (statistiques, hypothèses, phases détaillées, trace des trames)
     session.py                 SessionStore : historique des observations
+modbusai/mcp/                  couche 3 bis : le bus en outils MCP, sans Qt
+    protocol.py                JSON-RPC 2.0 et poignée de main MCP, sans transport ni Modbus
+    service.py                 liaisons, travaux en fond, serveur esclave : workers + controllers sans Qt
+    tools.py                   catalogue des outils (nom, description, schéma) et consignes du serveur
+    render.py                  mise en forme texte des résultats, pour un lecteur qui n'a pas d'écran
+    stdio.py                   transport entrée / sortie standard (mode local)
+    http.py                    transport HTTP (mode distant : Tailscale, VPN)
+    cli.py                     options de lancement, --ecriture, --http, --jeton
 modbusai/ui/                   couche 3 : Qt uniquement
     main_window.py             bandeau (liaison du MAÎTRE), thème, langue, onglets, arbitrage des ports, campagnes
-    roles.py                   Role, Tab, port_key(), Occupancy, can_start(), tab_states() : arbitrage des ports
     workers.py                 ModbusWorker (maître RTU/TCP), SnifferWorker, SlaveWorker, TcpSlaveWorker
     controllers.py             ScanController, CampaignController (durée), StressController (phases)
     palette.py                 charte AD : jetons de couleur des deux thèmes, couleurs d'état (State)
@@ -65,8 +74,8 @@ modbusai/ui/                   couche 3 : Qt uniquement
 assets/                        marque mark-*.png (A + « AD »), icône .ico (A sur fond d'accent) ; source/ = artwork d'origine, non embarqué
 tools/make_logo.py             régénère marque et icône, --accent donne sa couleur à chaque outil de la gamme
 tests/                         pytest ; fake_slave.py (esclave sur pty), virtual_bus.py (bus RS-485 virtuel)
-packaging/modbusai.spec        PyInstaller, exécutable unique ModbusAI_v<version>, ressources embarquées
-docs/                          propositions, plan, compte rendu de phase, mode d'emploi PDF
+packaging/modbusai.spec        PyInstaller : AD-ModbusAI_v<version> (fenêtré) et AD-ModbusAI-MCP_v<version> (console)
+docs/                          propositions, plan, compte rendu de phase, mode d'emploi PDF, mcp.md (mise en service)
 docs/manuel/                   captures.py (captures sur bus virtuel) et build_manuel.py (HTML -> PDF via Chromium)
 ```
 
@@ -80,12 +89,20 @@ docs/manuel/                   captures.py (captures sur bus virtuel) et build_m
 - `ui` importe les trois couches. Aucune logique métier dans `ui` : composer
   une `Request`, ordonnancer des requêtes (controllers), afficher. Le port
   (série ou socket) n'est touché que dans les threads de `ui/workers.py`.
+- `mcp` est un second client des trois couches, au même rang que `ui` et sans
+  Qt : `tests/test_mcp.py` et l'exclusion PySide6 du spec garantissent qu'aucun
+  import graphique n'y entre. Même règle qu'en `ui` : composer, ordonnancer,
+  mettre en forme, jamais décider. La pile JSON-RPC est écrite en propre comme
+  la pile RTU, pour n'ajouter aucune dépendance. Un outil qui échoue renvoie un
+  résultat `isError` que le modèle lit ; seule une faute de protocole (méthode
+  inconnue, paramètres illisibles) donne un objet `error` JSON-RPC.
 - `i18n` est un module feuille sans Qt, importable par toutes les couches :
   les textes lisibles sont écrits en français et passés à `tr()`, l'anglais
   vient de `i18n_en.EN` (une clé absente retombe sur le français). Les
   gabarits dynamiques utilisent `tr("... {p0} ...").format(p0=...)`. Le test
   `test_i18n` échoue si une clé du code n'a pas sa traduction.
-- **Un port, un rôle** (`ui/roles.py`) : l'arbitrage porte sur la ressource, pas
+- **Un port, un rôle** (`roles.py`, hors `ui` car le serveur MCP l'applique
+  aussi) : l'arbitrage porte sur la ressource, pas
   sur le rôle. `port_key(settings, listen=)` donne la clé (port série, ou point
   TCP distingué entre connexion et écoute) ; `can_start(role, port, active)`
   refuse en nommant le port et le rôle qui l'occupe. Maître et serveur esclave
@@ -147,6 +164,14 @@ docs/manuel/                   captures.py (captures sur bus virtuel) et build_m
   `phase_reading` en clair) et enfin la trace de toutes les trames. Le fichier
   doit se suffire à lui-même : il est relu sans l'application, éventuellement
   par un assistant.
+- **Serveur MCP** : `ModbusService` tient la liaison du maître, l'historique et
+  le serveur esclave ; un travail long (scan, campagne, torture, écoute) tourne
+  dans un fil, réserve la liaison et se suit par `job_status`. Les outils qui
+  écrivent (bus ou tables du simulateur) ne sont pas proposés sans `--ecriture` :
+  un outil absent vaut mieux qu'un outil qui refuse. En HTTP, l'écoute est liée
+  à 127.0.0.1 par défaut, un jeton peut être exigé et un en-tête `Origin`
+  étranger est refusé. Ajouter un outil = une entrée dans `tools.py` (schéma
+  JSON et gestionnaire) plus son rendu dans `render.py`.
 - **Marque** : `assets/mark-*.png` (le A et les lettres « AD ») pour l'interface,
   `modbusai.ico` (le A seul sur fond d'accent) pour la barre des tâches, où les
   lettres seraient illisibles. `tools/make_logo.py --accent` les régénère : la
@@ -213,9 +238,10 @@ docs/manuel/                   captures.py (captures sur bus virtuel) et build_m
 ```
 python -m venv .venv && .venv/Scripts/pip install -r requirements-dev.txt
 python main.py                           lancer l'application
+python -m modbusai.mcp                   serveur MCP sur l'entrée standard (--ecriture, --http, --jeton)
 python -m pytest                         tests (pty / bus virtuel Linux uniquement pour quelques modules)
 ruff check .                             lint
-pyinstaller packaging/modbusai.spec      exécutable unique dans dist/
+pyinstaller packaging/modbusai.spec      les deux exécutables dans dist/
 ```
 
 Sans matériel (Linux) : `tests/fake_slave.py` (esclave sur un pty) et
