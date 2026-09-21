@@ -70,13 +70,19 @@ def manual_html() -> str:
         (
             tr("Blocages"),
             tr(
-                "Un seul rôle occupe le port à la fois : en espion ou en serveur esclave, les autres onglets sont grisés jusqu’à l’arrêt. Depuis un maître connecté, lancer l’écoute ou le serveur ferme la liaison maître tout seul."
+                "Une ressource ne sert qu’à un rôle à la fois, mais deux rôles tournent en parallèle sur deux ports différents. Pendant un scan, une campagne ou une torture, seuls les onglets qui partagent la liaison du maître sont verrouillés ; ESPION et SERVEUR ESCLAVE restent accessibles. Lancer l’écoute sur le port du maître ferme d’abord cette liaison."
+            ),
+        ),
+        (
+            tr("SERVEUR MCP"),
+            tr(
+                "Un second exécutable, AD-ModbusAI-MCP, expose le bus comme un jeu d’outils qu’un assistant appelle lui-même : lire, scanner, écouter, lancer une campagne, analyser, produire le rapport. En local il se lance par le client ; avec --http il écoute sur un réseau privé (Tailscale, VPN). Lecture seule tant qu’on ne passe pas --ecriture."
             ),
         ),
     ]
     html = [
         f"<h3>{tr('Mode d’emploi')}</h3>",
-        f"<p><i>{tr('Version courte ; le mode d’emploi complet viendra dans une prochaine version.')}</i></p>",
+        f"<p><i>{tr('Version courte ; le mode d’emploi complet est le PDF livré avec l’outil.')}</i></p>",
     ]
     for title, text in sections:
         html.append(f"<p><b>{title}</b><br>{text}</p>")

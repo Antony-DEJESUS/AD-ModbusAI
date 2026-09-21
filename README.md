@@ -1,9 +1,9 @@
 # AD - ModbusAI
 
 Outil de diagnostic Modbus RTU / RS-485 et Modbus TCP pour le chantier (GTB,
-industriel), en français ou en anglais. Cinq onglets, un seul port à la fois :
-un port ne sert qu'à un rôle à la fois, mais maître et serveur esclave peuvent
-tourner en parallèle sur deux ports différents.
+industriel), en français ou en anglais. Cinq onglets, et une règle : une
+ressource ne sert qu'à un rôle à la fois, mais maître et serveur esclave
+tournent en parallèle sur deux ports différents.
 
 | Onglet | Rôle |
 |---|---|
@@ -13,13 +13,21 @@ tourner en parallèle sur deux ports différents.
 | DIAGNOSTIC | campagnes minutées, test de torture expliqué phase par phase, statistiques, hypothèses classées avec légende et aide, tests pour départager, export txt avec toutes les trames |
 | SERVEUR ESCLAVE | simulateur d'esclave façon Mod_RSsim (RTU ou TCP) sur sa propre liaison, injection de défauts, maîtres connectés, cellules lues ou écrites éclairées en vert |
 
+Depuis la 1.1.0, un **serveur MCP** livré à côté expose le bus comme un jeu
+d'outils qu'un assistant appelle lui-même : il lit un registre, scanne les
+adresses, lance une campagne, lit les hypothèses, puis enchaîne le test qui les
+départage, sans quitter la conversation. En local, ou à distance par un réseau
+privé de type Tailscale. Mise en service : [`docs/mcp.md`](docs/mcp.md).
+
 Au premier démarrage (et à la première ouverture de chaque version), la pop-up
 À propos présente l'outil et son historique ; le bouton À PROPOS la rouvre.
 
 Habillage : charte AD (gris chauds et terracotta), thème sombre et
 thème clair, définie une seule fois dans `modbusai/ui/palette.py`.
 
-Version 1.0.0 : les trois phases sont livrées et validées sur chantier.
+Version 1.1.0. Les trois phases de l'application sont livrées et validées sur
+chantier ; le serveur MCP s'y ajoute. Mode d'emploi complet en PDF dans
+[`docs/`](docs/).
 
 Version : barre de titre et pop-up À propos (`modbusai/__init__.py`), historique dans `CHANGELOG.md`.
 
@@ -31,15 +39,33 @@ py -m venv .venv
 .venv\Scripts\python main.py
 ```
 
-## Construire l'exécutable unique
+## Construire les exécutables
 
 ```powershell
 .venv\Scripts\pip install -r requirements-dev.txt
 .venv\Scripts\pyinstaller packaging\modbusai.spec
 ```
 
-Résultat : `dist\AD-ModbusAI_v<version>.exe`, sans installateur, avec le logo AD
-en icône.
+Résultat, sans installateur et avec le logo AD en icône :
+
+| Fichier | Rôle |
+|---|---|
+| `dist\AD-ModbusAI_v<version>.exe` | l'application, fenêtrée |
+| `dist\AD-ModbusAI-MCP_v<version>.exe` | le serveur MCP, en console |
+
+Deux fichiers parce qu'un exécutable fenêtré n'a, sous Windows, ni entrée ni
+sortie standard : c'est précisément par là que le protocole MCP dialogue. Le
+serveur n'embarque aucune bibliothèque graphique et pèse donc bien moins.
+
+## Lancer le serveur MCP
+
+```powershell
+.venv\Scripts\python -m modbusai.mcp              # entrée standard, lecture seule
+.venv\Scripts\python -m modbusai.mcp --ecriture   # écriture autorisée
+.venv\Scripts\python -m modbusai.mcp --http 100.87.1.4:8765 --jeton MonJeton
+```
+
+Puis, côté client : `claude mcp add modbusai -- <chemin de l'exécutable>`.
 
 ## Tests
 
@@ -64,8 +90,11 @@ partout.
    classe les hypothèses (légende des scores à côté du titre), `LANCER` sur un
    test exécute une campagne comparée à la référence, `EXPORTER TXT` enregistre
    le rapport, `AIDE` décrit toutes les hypothèses.
-4. ESPION et SERVEUR ESCLAVE ont leur propre bouton de démarrage : ils prennent
-   le port et grisent les autres onglets jusqu'à l'arrêt.
+4. ESPION et SERVEUR ESCLAVE ont leur propre bouton de démarrage. Une
+   ressource ne sert qu'à un rôle à la fois, mais deux rôles tournent en
+   parallèle sur deux ports différents ; seuls les onglets qui partagent la
+   liaison du maître se verrouillent pendant un scan, une campagne ou une
+   torture.
 5. `THÈME` bascule clair / sombre ; la liste Français / English change la
    langue (port libre requis).
 

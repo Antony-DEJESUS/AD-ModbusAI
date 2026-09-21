@@ -175,7 +175,8 @@ SECTIONS: list[tuple[str, str]] = [
     ("9", "Un port, un rôle : l'arbitrage"),
     ("10", "Câblage RS-485 et bonnes pratiques"),
     ("11", "Dépannage"),
-    ("12", "Annexes"),
+    ("12", "Serveur MCP : diagnostiquer avec un assistant"),
+    ("13", "Annexes"),
 ]
 
 
@@ -377,7 +378,7 @@ def s4_maitre() -> str:
                 [f"<span class='chip' style='color:{OK};border-color:{OK}'>OK</span>", "Réponse valide, CRC juste, cohérente avec la requête."],
                 [f"<span class='chip' style='color:{WARN};border-color:{WARN}'>TIMEOUT</span>", "Aucun octet reçu dans le délai. Esclave absent, mauvaise adresse, A/B inversés, mauvaise vitesse, ou esclave trop lent pour le TimeOut choisi."],
                 [f"<span class='chip' style='color:{ERROR};border-color:{ERROR}'>ERREUR CRC</span>", "Une trame est revenue mais son CRC est faux : bruit, collision, mauvaise vitesse ou parité."],
-                [f"<span class='chip' style='color:{ERROR};border-color:{ERROR}'>EXCEPTION</span>", "L'esclave a répondu par un code d'exception (annexe 12.2). Il existe et communique : c'est la requête qui ne lui convient pas."],
+                [f"<span class='chip' style='color:{ERROR};border-color:{ERROR}'>EXCEPTION</span>", "L'esclave a répondu par un code d'exception (annexe 13.2). Il existe et communique : c'est la requête qui ne lui convient pas."],
                 [f"<span class='chip' style='color:{ERROR};border-color:{ERROR}'>REPONSE INCOHERENTE</span>", "CRC juste, mais mauvais esclave, mauvaise fonction ou mauvaise longueur : souvent un doublon d'adresse."],
                 ["<span class='chip' style='color:#7B54BE;border-color:#7B54BE'>ERREUR LIAISON</span>", "Le port a disparu ou refuse l'écriture : adaptateur débranché, pilote, concentrateur USB."],
             ],
@@ -691,7 +692,105 @@ def s11_depannage() -> str:
     )
 
 
-def s12_annexes() -> str:
+def s12_mcp() -> str:
+    """Chapitre engendré depuis le catalogue réel : la liste ne peut pas mentir."""
+    from modbusai.mcp.service import ModbusService
+    from modbusai.mcp.tools import build_tools
+
+    families = [
+        ("Liaison", ("list_ports", "connect", "disconnect", "status")),
+        ("Échanges", ("read", "write", "identify")),
+        ("Observation", ("scan", "sniff", "campaign", "stress_test", "job_status", "job_stop")),
+        ("Diagnostic", ("analyse", "report", "clear_history", "catalogue")),
+        ("Serveur esclave", ("slave_start", "slave_stop", "slave_set", "slave_table")),
+    ]
+    catalogue = {t.name: t for t in build_tools(ModbusService(allow_write=True))}
+    rows = []
+    for family, names in families:
+        for name in names:
+            tool = catalogue[name]
+            summary = tool.description.split(".")[0] + "."
+            mark = " <b>(écriture)</b>" if tool.writes else ""
+            # La famille est répétée sur chaque ligne : le tableau peut changer
+            # de page, une cellule vide en haut d'une page ne dirait plus rien.
+            rows.append([esc(family), f"<code>{esc(name)}</code>{mark}", esc(summary)])
+
+    guards = [
+        ["Lecture seule par défaut", "Sans <code>--ecriture</code>, les outils qui écrivent ne sont pas proposés à l'assistant. Un outil absent vaut mieux qu'un outil qui refuse."],
+        ["Écoute locale par défaut", "En HTTP, le serveur se lie à 127.0.0.1 tant qu'on ne demande pas autre chose, et signale une écoute exposée sans jeton."],
+        ["Jeton partagé", "<code>--jeton</code> exige un en-tête <code>Authorization: Bearer</code> à chaque requête."],
+        ["Origine refusée", "Une requête portant un en-tête <code>Origin</code> étranger est rejetée : parade au détournement DNS depuis un navigateur."],
+        ["Un port, un rôle", "Le serveur obéit au même arbitrage que la fenêtre (chapitre 9) : il refuse un port déjà tenu, en nommant ce qui l'occupe."],
+    ]
+
+    return (
+        h1("12", "Serveur MCP : diagnostiquer avec un assistant")
+        + "<p>Le rapport texte du chapitre 7 se relit avec un assistant, mais il faut l'exporter, le coller, puis "
+        "revenir dans l'application pour exécuter le test proposé. Le <b>serveur MCP</b> supprime ces allers-retours : "
+        "l'assistant appelle lui-même les outils du bus. Il lit un registre, scanne les adresses, lance une campagne, "
+        "lit les hypothèses, puis enchaîne le test qui les départage, sans quitter la conversation.</p>"
+        + "<p>C'est un programme distinct de l'application, et facultatif. Il ne remplace pas la fenêtre : il l'ouvre "
+        "à un autre opérateur.</p>"
+        + "<h2>12.1 Où l'installer</h2>"
+        + "<p>Le serveur tourne sur <b>la machine branchée au bus</b> : celle qui porte l'adaptateur USB / RS-485, ou "
+        "celle qui atteint la passerelle Modbus TCP. Il tient dans un second exécutable, "
+        "<code>AD-ModbusAI-MCP_v" + esc(__version__) + ".exe</code>, livré à côté de l'application. Deux fichiers "
+        "et non un seul parce qu'un exécutable fenêtré n'a, sous Windows, ni entrée ni sortie standard — or c'est "
+        "précisément par là que le protocole dialogue.</p>"
+        + "<h2>12.2 Mode local</h2>"
+        + "<p>Le cas le plus simple, et le plus sûr : le client lance le serveur lui-même, lui parle par des tubes, et "
+        "l'arrête en fin de session. Rien n'écoute sur le réseau. Avec Claude Code :</p>"
+        + "<pre>claude mcp add modbusai -- \"C:\\Outils\\AD-ModbusAI-MCP_v" + esc(__version__) + ".exe\"</pre>"
+        + "<p>Ajoutez <code>--ecriture</code> à la fin de la ligne pour autoriser l'écriture sur le bus et le serveur "
+        "esclave simulé. Vérification : demandez « quels ports série vois-tu ? ».</p>"
+        + "<h2>12.3 Mode à distance</h2>"
+        + "<p>Le poste reste sur site, branché au bus ; vous diagnostiquez depuis le bureau. Le serveur écoute alors "
+        "en HTTP, <b>sur son adresse de réseau privé uniquement</b> — Tailscale, VPN d'entreprise, réseau d'atelier :</p>"
+        + "<pre>AD-ModbusAI-MCP_v" + esc(__version__) + ".exe --http 100.87.1.4:8765 --jeton MonJetonLong</pre>"
+        + "<p>Puis, depuis la machine distante :</p>"
+        + "<pre>claude mcp add --transport http modbusai http://100.87.1.4:8765/mcp \\\n"
+        "  --header \"Authorization: Bearer MonJetonLong\"</pre>"
+        + note(
+            "attention",
+            "Ce serveur parle à des automates",
+            "Ne l'exposez jamais sur l'internet ouvert. Le réseau qui le porte doit être privé, et l'assistant doit "
+            "tourner sur une machine de ce réseau : une session dans un navigateur s'exécute dans le nuage et ne "
+            "voit pas votre réseau privé.",
+        )
+        + "<h2>12.4 Les garde-fous</h2>"
+        + table(["Garde-fou", "Ce qu'il fait"], guards)
+        + "<h2>12.5 Les outils</h2>"
+        + "<p>Adresses en base 0, comme partout ailleurs. Les outils marqués « écriture » n'apparaissent que si le "
+        "serveur a été lancé avec <code>--ecriture</code>.</p>"
+        + table(["Famille", "Outil", "Ce qu'il fait"], rows, "compact")
+        + "<h2>12.6 Les travaux longs</h2>"
+        + "<p>Un scan, une campagne, un test de torture ou une écoute durent des minutes. Ces outils rendent la main "
+        "tout de suite et le travail se poursuit en fond ; l'argument <code>wait_s</code> permet d'attendre la fin "
+        "quand elle est proche. Pendant ce temps, les autres outils du bus sont refusés en nommant ce qui occupe la "
+        "liaison, et <code>job_stop</code> interrompt en rendant le résultat partiel.</p>"
+        + "<h2>12.7 Une session type</h2>"
+        + "<ol>"
+        + "<li><code>connect</code> avec le port et la vitesse du bus.</li>"
+        + "<li><code>scan</code> sur 1 à 32 pour savoir qui répond.</li>"
+        + "<li><code>read</code> sur l'esclave visé ; format <code>flottant32</code> si la valeur affichée est absurde, "
+        "les quatre ordres de mots sont alors montrés côte à côte.</li>"
+        + "<li><code>campaign</code> de deux minutes sur le registre suspect.</li>"
+        + "<li><code>analyse</code> : les hypothèses arrivent classées, avec leurs tests.</li>"
+        + "<li>Le test proposé s'exécute comme une campagne aux réglages modifiés, et se compare à la référence.</li>"
+        + "<li><code>report</code> pour garder la trace, à archiver avec le compte rendu d'intervention.</li>"
+        + "</ol>"
+        + note(
+            "astuce",
+            "Ce que l'assistant sait déjà",
+            "Le serveur lui donne ses consignes à la connexion : adresses en base 0, une exception Modbus est une "
+            "réponse valide et non une panne, un port ne sert qu'à un rôle à la fois, et les phases à défauts "
+            "provoqués sortent des statistiques. Ces règles viennent du code, pas d'une copie : elles ne peuvent pas "
+            "diverger de ce manuel.",
+        )
+    )
+
+
+def s13_annexes() -> str:
     fn_rows = []
     for f in FunctionCode:
         label, usage = FUNCTION_NAMES.get(f.name, (f.name, ""))
@@ -709,16 +808,16 @@ def s12_annexes() -> str:
         ["Timeout", "Délai au bout duquel le maître renonce à attendre. Un timeout n'est pas une erreur de l'esclave : c'est une absence de réponse, quelle qu'en soit la cause."],
     ]
     return (
-        h1("12", "Annexes")
-        + "<h2>12.1 Codes fonction</h2>"
+        h1("13", "Annexes")
+        + "<h2>13.1 Codes fonction</h2>"
         + table(["Code", "Fonction", "Où dans l'outil"], fn_rows, "compact")
-        + "<h2>12.2 Codes d'exception</h2>"
+        + "<h2>13.2 Codes d'exception</h2>"
         + "<p>Une exception est une <b>réponse valide</b> : l'esclave existe, communique, et refuse la requête. Le "
         "diagnostic la compte comme telle.</p>"
         + table(["Code", "Signification"], exc_rows, "compact")
-        + "<h2>12.3 Glossaire</h2>"
+        + "<h2>13.3 Glossaire</h2>"
         + table(["Terme", "Définition"], glossary, "compact")
-        + "<h2>12.4 Règle de versionnage</h2>"
+        + "<h2>13.4 Règle de versionnage</h2>"
         + "<p>Numéro X.Y.Z. Les versions 0.1 à 0.3 ont porté les trois phases de développement ; la 1.0.0 est la "
         "première version complète, validée sur chantier. Ensuite : X change pour une rupture (architecture ou format "
         "des données), Y pour une nouvelle fonction, Z pour une correction. L'historique complet est dans "
@@ -742,7 +841,8 @@ def build_html() -> str:
         + s9_arbitrage()
         + s10_cablage()
         + s11_depannage()
-        + s12_annexes()
+        + s12_mcp()
+        + s13_annexes()
     )
     return f"<!DOCTYPE html><html lang='fr'><head><meta charset='utf-8'><title>{esc(APP_NAME)} — Mode d'emploi</title><style>{CSS}</style></head><body>{body}</body></html>"
 
