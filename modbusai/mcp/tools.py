@@ -11,11 +11,12 @@ et rend le résultat en texte. Les verdicts viennent de ``analysis``.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from modbusai import APP_TITLE
 from modbusai.analysis.campaign import CampaignSpec
-from modbusai.analysis.diagnostic import CATALOGUE, SCORE_EXPLANATION, HypothesisInfo
+from modbusai.analysis.diagnostic import CATALOGUE, SCORE_EXPLANATION, CampaignComparison, HypothesisInfo
 from modbusai.analysis.observations import DEFAULT_SOURCES, SOURCE_TEST
 from modbusai.analysis.report import build_report
 from modbusai.analysis.scanner import ScanPlan
@@ -203,6 +204,7 @@ def build_tools(service: ModbusService) -> list[Tool]:
         _sniff(service),
         _campaign(service),
         _stress(service),
+        _run_test(service),
         _job_status(service),
         _job_stop(service),
         _analyse(service),
@@ -576,6 +578,72 @@ def _stress(service: ModbusService) -> Tool:
     )
 
 
+def _run_test(service: ModbusService) -> Tool:
+    """Exécute un test suggéré et le compare à la situation de référence.
+
+    C'est la boucle du diagnostic : une hypothèse propose un test, le test
+    modifie un paramètre, et c'est l'écart avec la référence qui tranche.
+    """
+
+    def run(args: dict[str, Any]) -> str:
+        key = str(args.get("test") or "").strip()
+        if not key:
+            raise ToolError("Argument « test » attendu : la clé d'un test proposé par « analyse ».")
+        hypothesis, test = service.find_test(key)
+        request = _request(args)
+        baseline = service.stats().get(request.slave_id)
+        if baseline is None or baseline.total == 0:
+            raise ToolError(
+                f"Aucune observation sur l'esclave {request.slave_id} : un test se compare à une référence, "
+                "lancez d'abord une campagne."
+            )
+        spec = test.to_campaign(request)
+        duration = _float(args, "duration_s", None)
+        count = _int(args, "max_count", 0) or None
+        if duration is not None or count is not None:
+            # Un test dure deux minutes par défaut ; on peut l'écourter quand
+            # le défaut est franc, la comparaison reste valable.
+            spec = replace(spec, duration_s=duration, max_count=count)
+        job = Job("test", test.title, expected=spec.expected_count())
+
+        def work(current: Job) -> str:
+            result = service.run_campaign(spec, current)
+            comparison = CampaignComparison(test, baseline, result)
+            service.comparisons.append(comparison)
+            return (
+                f"Hypothèse visée : {hypothesis.title} (score {hypothesis.score})\n"
+                f"Test « {test.key} » : {test.title}\n"
+                f"{test.description}\n"
+                f"Réglages : {spec.describe()}\n\n"
+                f"Référence : {baseline.total} échanges, {100 * baseline.error_ratio:.1f} % de défauts\n"
+                f"Résultat  : {result.total} échanges, {100 * result.error_ratio:.1f} % de défauts\n\n"
+                f"Verdict : {comparison.verdict()}"
+            )
+
+        service.start_job(job, work)
+        return _finish(job, _wait(args, 15.0), f"Durée prévue : {spec.duration_s or 0:.0f} s.")
+
+    schema = obj(
+        {
+            "test": {"type": "string", "description": "Clé du test, telle que « analyse » l'a donnée : par exemple timeout_x2, slow_baud, period, parity_even, stop2, gap20."},
+            **REQUEST_PROPERTIES,
+            "duration_s": {"type": "number", "description": "Écourte le test, qui dure deux minutes par défaut. Utile quand le défaut est franc."},
+            "max_count": {"type": "integer", "description": "Arrête le test après ce nombre de lectures."},
+            "wait_s": {"type": "number", "default": 15},
+        },
+        required=("test", "slave"),
+    )
+    return _tool(
+        "run_test",
+        "Exécute un test proposé par « analyse » : une campagne aux réglages modifiés (timeout doublé, 9600 bauds, "
+        "parité paire, période lente...), comparée à la situation de référence. Le verdict dit si les défauts ont "
+        "disparu, diminué, empiré ou n'ont pas bougé : c'est ce qui départage deux hypothèses. "
+        "Les tests qui demandent une action physique sur le bus sont refusés en expliquant quoi faire.",
+        schema,
+        run,
+    )
+
+
 def _job_status(service: ModbusService) -> Tool:
     def run(args: dict[str, Any]) -> str:
         job = service.job
@@ -649,6 +717,7 @@ def _report(service: ModbusService) -> Tool:
             service.settings,
             service.stats(sources),
             service.hypotheses(sources),
+            comparisons=service.comparisons,
             stress=service.stress_report,
             observations=observations,
             sources_label=", ".join(sources),

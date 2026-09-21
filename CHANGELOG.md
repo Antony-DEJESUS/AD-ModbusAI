@@ -14,6 +14,12 @@ titre et le nom de l'exécutable.
   test de torture, analyser, produire le rapport, piloter le serveur esclave
   simulé. La boucle « hypothèse, test qui départage, nouvelle hypothèse » se
   fait sans quitter la conversation.
+- **La boucle de diagnostic est complète** : `analyse` propose des tests,
+  `run_test` en exécute un et le compare à la référence. Le verdict dit si
+  les défauts ont disparu, diminué, empiré ou n'ont pas bougé, c'est-à-dire
+  ce qui départage deux hypothèses. Les tests qui demandent une action
+  physique sur le bus sont refusés en expliquant quoi faire. Les tests
+  exécutés figurent au rapport, comme dans l'application.
 - **Deux transports.** Sans option, le serveur parle par l'entrée standard :
   c'est le mode local, Claude Code le lance lui-même sur le poste branché au
   bus. Avec `--http`, il écoute sur une adresse : c'est le mode à distance,

@@ -701,7 +701,7 @@ def s12_mcp() -> str:
         ("Liaison", ("list_ports", "connect", "disconnect", "status")),
         ("Échanges", ("read", "write", "identify")),
         ("Observation", ("scan", "sniff", "campaign", "stress_test", "job_status", "job_stop")),
-        ("Diagnostic", ("analyse", "report", "clear_history", "catalogue")),
+        ("Diagnostic", ("analyse", "run_test", "report", "clear_history", "catalogue")),
         ("Serveur esclave", ("slave_start", "slave_stop", "slave_set", "slave_table")),
     ]
     catalogue = {t.name: t for t in build_tools(ModbusService(allow_write=True))}
@@ -776,7 +776,9 @@ def s12_mcp() -> str:
         "les quatre ordres de mots sont alors montrés côte à côte.</li>"
         + "<li><code>campaign</code> de deux minutes sur le registre suspect.</li>"
         + "<li><code>analyse</code> : les hypothèses arrivent classées, avec leurs tests.</li>"
-        + "<li>Le test proposé s'exécute comme une campagne aux réglages modifiés, et se compare à la référence.</li>"
+        + "<li><code>run_test</code> avec la clé du test proposé : l'outil relance une campagne aux réglages modifiés "
+        "et donne le verdict, défauts disparus, réduits, inchangés ou aggravés. Un test qui demande une action "
+        "sur le bus est refusé en disant quoi faire.</li>"
         + "<li><code>report</code> pour garder la trace, à archiver avec le compte rendu d'intervention.</li>"
         + "</ol>"
         + note(

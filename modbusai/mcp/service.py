@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from modbusai.analysis.campaign import CampaignSpec
-from modbusai.analysis.diagnostic import Hypothesis, analyse
+from modbusai.analysis.diagnostic import CampaignComparison, Hypothesis, SuggestedTest, analyse
 from modbusai.analysis.identification import DeviceIdentity, decode_device_id, decode_report_slave_id
 from modbusai.analysis.observations import (
     DEFAULT_SOURCES,
@@ -218,6 +218,7 @@ class ModbusService:
         self._slave: SlaveServer | None = None
         self.stress_report: StressReport | None = None
         self.skipped_phases: list[str] = []  # phases que l'adaptateur a refusé de régler
+        self.comparisons: list[CampaignComparison] = []  # tests exécutés, comparés à leur référence
 
     # ------------------------------------------------------------- liaison
     @property
@@ -539,9 +540,30 @@ class ModbusService:
         chosen = sources or DEFAULT_SOURCES
         return analyse(self.stats(chosen), self.session.observations(chosen), self._settings)
 
+    def find_test(self, key: str) -> tuple[Hypothesis, SuggestedTest]:
+        """Le test suggéré portant cette clé, dans les hypothèses en cours."""
+        runnable: list[str] = []
+        for hypothesis in self.hypotheses():
+            for test in hypothesis.tests:
+                if test.runnable:
+                    runnable.append(test.key)
+                if test.key == key:
+                    if not test.runnable:
+                        raise ToolError(
+                            f"Le test « {key} » ({test.title}) demande une action sur le bus, "
+                            f"l'outil ne peut pas l'exécuter : {test.description}"
+                        )
+                    return hypothesis, test
+        available = ", ".join(dict.fromkeys(runnable)) or "aucun"
+        raise ToolError(
+            f"Aucun test « {key} » dans les hypothèses en cours. Exécutables actuellement : {available}. "
+            "Appelez « analyse » pour voir les hypothèses et leurs tests."
+        )
+
     def clear(self) -> None:
         self.session.clear()
         self.stress_report = None
+        self.comparisons.clear()
 
     # ---------------------------------------------------- serveur esclave
     def slave_start(self, settings: LinkSettings, config: SlaveConfig) -> SlaveServer:

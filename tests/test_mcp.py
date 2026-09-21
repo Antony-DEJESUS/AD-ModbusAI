@@ -548,3 +548,52 @@ def test_sniffing_without_any_link_says_what_is_missing():
     dispatcher = build_dispatcher(ModbusService())
     text, failed = call(dispatcher, "sniff", seconds=2)
     assert failed and "port" in text and "vitesse" in text
+
+
+def test_a_suggested_test_runs_and_is_compared_to_the_reference():
+    """La boucle complète : campagne, hypothèses, test qui départage, verdict."""
+    with VirtualBus(2) as bus:
+        service = ModbusService(allow_write=True)
+        service.store.set(Table.HOLDING_REGISTERS, 0, [1])
+        # Un esclave qui perd une requête sur trois : de quoi faire naître une hypothèse.
+        service.slave_start(
+            SerialSettings(bus.ports[1], inter_frame_delay_ms=BUS_GAP_MS),
+            SlaveConfig(slave_ids={7}, drop_ratio=0.33),
+        )
+        service.connect(SerialSettings(bus.ports[0], inter_frame_delay_ms=BUS_GAP_MS, response_timeout_ms=300))
+        dispatcher = build_dispatcher(service)
+        try:
+            text, failed = call(dispatcher, "campaign", slave=7, period_ms=0, max_count=30, duration_s=None, wait_s=60)
+            assert not failed, text
+
+            text, failed = call(dispatcher, "analyse")
+            assert not failed, text
+            keys = [line.split("«")[1].split("»")[0].strip() for line in text.splitlines() if "test «" in line]
+            assert keys, text
+
+            runnable = [k for k in keys if k in ("timeout_x2", "period", "slow_baud", "parity_even", "stop2", "gap20")]
+            assert runnable, keys
+            text, failed = call(
+                dispatcher, "run_test", test=runnable[0], slave=7, max_count=20, duration_s=None, wait_s=90
+            )
+            assert not failed, text
+            assert "Référence" in text and "Verdict" in text
+            assert len(service.comparisons) == 1
+
+            report, failed = call(dispatcher, "report", include_trace=False)
+            assert not failed, report
+            assert service.comparisons[0].test.title in report  # le test figure au rapport
+        finally:
+            service.shutdown()
+
+
+def test_an_unknown_or_manual_test_is_refused_with_guidance():
+    with VirtualBus(2) as bus:
+        service = connected_pair(bus, {7}, [1])
+        dispatcher = build_dispatcher(service)
+        try:
+            call(dispatcher, "campaign", slave=7, period_ms=0, max_count=8, duration_s=None, wait_s=60)
+            text, failed = call(dispatcher, "run_test", test="inexistant", slave=7, wait_s=5)
+            assert failed and "analyse" in text
+        finally:
+            service.shutdown()

@@ -94,6 +94,7 @@ serait une mauvaise idée, ce serveur parle à des automates.
 | `stress_test` | Enchaîne les phases de torture et les compare. |
 | `job_status`, `job_stop` | Avancement et arrêt du travail en cours. |
 | `analyse` | Statistiques par esclave et hypothèses classées, avec les tests qui départagent. |
+| `run_test` | Exécute un test proposé et le compare à la référence : défauts disparus, réduits, inchangés ou aggravés. |
 | `report` | Le rapport texte complet, celui qu'exporte l'application. |
 | `clear_history` | Efface les observations. |
 | `catalogue` | Les fiches d'hypothèses : déclencheur, causes, confirmations. |
@@ -131,6 +132,8 @@ viennent du code, pas d'une copie.
    valeur affichée est absurde.
 4. `campaign` de deux minutes sur le registre suspect.
 5. `analyse` : les hypothèses arrivent classées, avec leurs tests.
-6. Le test proposé s'exécute comme une `campaign` aux réglages modifiés, et on
-   compare.
+6. `run_test` avec la clé du test proposé : une campagne aux réglages modifiés,
+   comparée à la référence, et un verdict. Un test qui demande une action sur
+   le bus (inverser A et B, débrancher un esclave) est refusé en disant quoi
+   faire.
 7. `report` pour garder la trace, à archiver avec le compte rendu d'intervention.
