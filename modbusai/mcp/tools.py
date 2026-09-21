@@ -409,9 +409,14 @@ def _scan(service: ModbusService) -> Tool:
         job = Job("scan", f"Scan {first}-{last}", expected=plan.total_probes)
 
         def work(current: Job) -> str:
-            results = service.run_scan(plan, current)
+            results, skipped = service.run_scan(plan, current)
             shown = results if _bool(args, "show_absent") else [r for r in results if r.present]
-            return render.scan_block(shown, current.done)
+            text = render.scan_block(shown, current.done)
+            if skipped:
+                text += "\n\nRéglages que l'adaptateur a refusés, non testés :\n" + "\n".join(
+                    f"  {line}" for line in skipped
+                )
+            return text
 
         service.start_job(job, work)
         estimate = plan.total_probes * plan.timeout_ms / 1000
@@ -526,7 +531,12 @@ def _stress(service: ModbusService) -> Tool:
         job = Job("stress", "Test de torture", expected=len(phases))
 
         def work(current: Job) -> str:
-            return render.phases_block(service.run_stress(phases, current))
+            text = render.phases_block(service.run_stress(phases, current))
+            if service.skipped_phases:
+                text += "\n\nPhases non exécutées, réglages refusés par l'adaptateur :\n" + "\n".join(
+                    f"  {line}" for line in service.skipped_phases
+                )
+            return text
 
         service.start_job(job, work)
         names = ", ".join(p.title for p in phases)

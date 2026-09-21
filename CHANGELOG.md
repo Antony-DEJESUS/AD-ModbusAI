@@ -24,6 +24,9 @@ titre et le nom de l'exécutable.
   l'option, les outils d'écriture ne sont même pas proposés. L'écoute HTTP est
   liée à 127.0.0.1 tant qu'on ne demande pas autre chose, accepte un jeton
   partagé (`--jeton`) et refuse les requêtes venues d'un navigateur.
+- Un réglage de liaison que l'adaptateur refuse (vitesse ou parité non gérée)
+  fait sauter la variante ou la phase concernée, en la nommant, au lieu
+  d'emporter le balayage ou le test de torture entier.
 - La pile MCP est écrite en propre, comme la pile RTU : aucune dépendance
   nouvelle, et l'exécutable du serveur n'embarque pas Qt.
 - `modbusai/roles.py` quitte la couche `ui` : l'arbitrage « un port, un rôle »

@@ -358,3 +358,107 @@ def test_http_transport_guards_the_port():
     finally:
         httpd.shutdown()
         httpd.server_close()
+
+
+# ------------------------------------------------------------- cas limites
+def test_shutdown_stops_a_running_job_and_closes_the_links():
+    """Le client ferme le tube au milieu d'une campagne : rien ne doit rester
+    ouvert, ni le port du maître ni celui du serveur esclave."""
+    with VirtualBus(2) as bus:
+        service = connected_pair(bus, {7}, [1])
+        dispatcher = build_dispatcher(service)
+        text, failed = call(dispatcher, "campaign", slave=7, period_ms=100, duration_s=60, wait_s=0)
+        assert not failed and "tourne en fond" in text
+        service.shutdown()
+        assert not service.connected
+        assert service.job is not None and not service.job.running
+        assert service.slave is None
+
+
+def test_a_transport_error_during_a_job_is_reported_not_swallowed():
+    """Le câble USB est débranché pendant la campagne : le travail doit le dire."""
+    with VirtualBus(2) as bus:
+        service = connected_pair(bus, {7}, [1])
+        dispatcher = build_dispatcher(service)
+        try:
+            call(dispatcher, "campaign", slave=7, period_ms=50, duration_s=30, wait_s=0)
+            time.sleep(0.2)
+            service._link.close()  # le port disparaît sous les pieds du travail
+            deadline = time.monotonic() + 10
+            while service.job.running and time.monotonic() < deadline:
+                time.sleep(0.05)
+            text, failed = call(dispatcher, "job_status", wait_s=5)
+            assert failed and ("Liaison" in text or "fermée" in text), text
+        finally:
+            service.shutdown()
+
+
+def test_two_jobs_at_once_are_refused():
+    with VirtualBus(2) as bus:
+        service = connected_pair(bus, {7}, [1])
+        dispatcher = build_dispatcher(service)
+        try:
+            call(dispatcher, "campaign", slave=7, period_ms=100, duration_s=30, wait_s=0)
+            text, failed = call(dispatcher, "scan", first=1, last=3, wait_s=0)
+            assert failed and "job_stop" in text
+        finally:
+            service.shutdown()
+
+
+def test_concurrent_calls_do_not_interleave_on_the_port():
+    """Deux clients HTTP en même temps : les échanges se suivent, aucun ne rate."""
+    with VirtualBus(2) as bus:
+        service = connected_pair(bus, {7}, [4242])
+        httpd, url = http_server(build_dispatcher(service))
+        answers: list[str] = []
+        lock = threading.Lock()
+
+        def reader() -> None:
+            _, answer = post(
+                url,
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "read", "arguments": {"slave": 7, "address": 0, "count": 1}},
+                },
+            )
+            with lock:
+                answers.append(answer["result"]["content"][0]["text"])
+
+        try:
+            threads = [threading.Thread(target=reader) for _ in range(6)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=20)
+            assert len(answers) == 6
+            assert all("4242" in text for text in answers), answers
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            service.shutdown()
+
+
+def test_sweeping_the_settings_restores_the_original_link():
+    """Le scan change vitesse et parité : il doit rendre la liaison du bandeau.
+
+    Un pseudo-terminal refuse la plupart des vitesses, comme le ferait un
+    adaptateur limité : ces variantes doivent être sautées et nommées, jamais
+    emporter le balayage entier.
+    """
+    with VirtualBus(2) as bus:
+        service = connected_pair(bus, {7}, [1])
+        dispatcher = build_dispatcher(service)
+        before = service.settings
+        try:
+            text, failed = call(
+                dispatcher, "scan", first=7, last=7, timeout_ms=60, retries=0, identify=False, sweep=True, wait_s=90
+            )
+            assert not failed, text
+            assert "présent" in text  # l'esclave reste trouvé avec les réglages qui passent
+            assert "refusés" in text  # et les variantes impossibles sont dites
+            assert service.settings == before
+            assert service.connected
+        finally:
+            service.shutdown()

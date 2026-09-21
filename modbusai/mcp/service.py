@@ -217,6 +217,7 @@ class ModbusService:
         self._job: Job | None = None
         self._slave: SlaveServer | None = None
         self.stress_report: StressReport | None = None
+        self.skipped_phases: list[str] = []  # phases que l'adaptateur a refusé de régler
 
     # ------------------------------------------------------------- liaison
     @property
@@ -378,15 +379,24 @@ class ModbusService:
         return job
 
     # -------------------------------------------------------------- scan
-    def run_scan(self, plan: ScanPlan, job: Job) -> list[ScanResult]:
-        """Parcourt variantes de liaison x adresses, puis identifie les présents."""
+    def run_scan(self, plan: ScanPlan, job: Job) -> tuple[list[ScanResult], list[str]]:
+        """Parcourt variantes de liaison x adresses, puis identifie les présents.
+
+        Une variante que l'adaptateur refuse (vitesse ou parité non gérée) est
+        sautée et signalée : elle ne doit pas emporter tout le balayage.
+        """
         results: list[ScanResult] = []
+        skipped: list[str] = []
         for variant in plan.settings_variants():
             if job.stop.is_set():
                 break
-            with self._lock:
-                if self._settings != variant:
-                    self._open(variant)
+            try:
+                with self._lock:
+                    if self._settings != variant:
+                        self._open(variant)
+            except ToolError as exc:
+                skipped.append(f"{variant.summary()} : {exc}")
+                continue
             job.phase = variant.summary()
             for slave_id in plan.slaves:
                 if job.stop.is_set():
@@ -396,7 +406,7 @@ class ModbusService:
                 if result.present and plan.identify:
                     result.identity, result.report_id = self.identify(slave_id, plan.timeout_ms)
                 results.append(result)
-        return results
+        return results, skipped
 
     def _probe_slave(self, plan: ScanPlan, slave_id: int, variant: LinkSettings) -> ScanResult:
         """Une adresse : on réessaie tant que « absent », un timeout isolé ne
@@ -452,13 +462,19 @@ class ModbusService:
     def run_stress(self, phases: Sequence[StressPhase], job: Job) -> StressReport:
         """Enchaîne les phases du scénario ; chacune est une campagne."""
         results: list[PhaseResult] = []
+        self.skipped_phases = []
         for index, phase in enumerate(phases, start=1):
             if job.stop.is_set():
                 break
             job.phase = f"{index}/{len(phases)} {phase.title}"
             job.done = 0
             job.expected = phase.spec.expected_count()
-            results.append(PhaseResult(phase, self.run_campaign(phase.spec, job)))
+            try:
+                results.append(PhaseResult(phase, self.run_campaign(phase.spec, job)))
+            except ToolError as exc:
+                # Vitesse ou parité que l'adaptateur refuse : on saute la phase
+                # et on le dit, plutôt que de perdre les phases suivantes.
+                self.skipped_phases.append(f"{phase.title} : {exc}")
         report = evaluate(results)
         self.stress_report = report
         return report
