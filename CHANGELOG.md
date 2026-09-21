@@ -24,6 +24,9 @@ titre et le nom de l'exécutable.
   l'option, les outils d'écriture ne sont même pas proposés. L'écoute HTTP est
   liée à 127.0.0.1 tant qu'on ne demande pas autre chose, accepte un jeton
   partagé (`--jeton`) et refuse les requêtes venues d'un navigateur.
+- L'écoute passive n'exige plus d'être connecté en maître : donnez à `sniff`
+  le port et la vitesse du bus. Avec un second adaptateur branché en
+  parallèle, l'espion et le maître cohabitent sur deux ports.
 - Un réglage de liaison que l'adaptateur refuse (vitesse ou parité non gérée)
   fait sauter la variante ou la phase concernée, en la nommant, au lieu
   d'emporter le balayage ou le test de torture entier.

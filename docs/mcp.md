@@ -57,6 +57,9 @@ claude mcp add --transport http modbusai http://100.87.1.4:8765/mcp \
   --header "Authorization: Bearer MonJetonLong"
 ```
 
+Au premier lancement, Windows demande d'autoriser l'écoute dans son pare-feu :
+acceptez pour les réseaux privés, refusez pour les réseaux publics.
+
 L'adresse `100.x.y.z` se lit avec `tailscale ip -4` sur le poste de chantier.
 Les règles d'accès de Tailscale décident qui peut atteindre ce port ; le jeton
 est une seconde barrière, utile quand plusieurs personnes partagent le tailnet.
@@ -86,7 +89,7 @@ serait une mauvaise idée, ce serveur parle à des automates.
 | `write` | Écrit une ou plusieurs valeurs. Soumis à `--ecriture`. |
 | `identify` | FC43 puis FC17 sur un esclave. |
 | `scan` | Cherche les équipements sur une plage d'adresses, avec balayage des vitesses en option. |
-| `sniff` | Écoute passive du bus, sans jamais émettre. RTU uniquement. |
+| `sniff` | Écoute passive du bus, sans jamais émettre. Sur son propre port avec un second adaptateur, le maître reste connecté. RTU uniquement. |
 | `campaign` | Répète une lecture pendant une durée : c'est ainsi qu'on voit un défaut intermittent. |
 | `stress_test` | Enchaîne les phases de torture et les compare. |
 | `job_status`, `job_stop` | Avancement et arrêt du travail en cours. |
@@ -95,6 +98,14 @@ serait une mauvaise idée, ce serveur parle à des automates.
 | `clear_history` | Efface les observations. |
 | `catalogue` | Les fiches d'hypothèses : déclencheur, causes, confirmations. |
 | `slave_start`, `slave_stop`, `slave_set`, `slave_table` | Simulateur d'équipement et ses tables. |
+
+## Écouter sans interrompre le maître
+
+Par défaut, `sniff` reprend le port du maître : cette liaison est fermée le
+temps de l'écoute, puis rouverte. Avec un second adaptateur USB / RS-485
+branché en parallèle sur le bus, donnez son port à `sniff` : les deux rôles
+cohabitent alors, le maître continue d'interroger pendant que l'espion regarde
+passer tout le trafic, y compris celui de la GTB.
 
 ## Les travaux longs
 

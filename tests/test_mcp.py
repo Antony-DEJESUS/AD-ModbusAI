@@ -494,3 +494,57 @@ def test_out_of_range_writes_are_refused_with_a_readable_message():
     assert failed and "0..65535" in text
     text, failed = call(dispatcher, "slave_set", table="holding", address=0, values=list(range(1001)))
     assert failed and "au plus par appel" in text
+
+
+def test_sniffing_on_its_own_port_leaves_the_master_connected():
+    """Un second adaptateur en parallèle : on écoute sans interrompre le maître.
+
+    Quatre points : un maître extérieur qui fait le trafic, l'esclave qui lui
+    répond, la liaison maître du serveur MCP, et l'adaptateur d'écoute.
+    """
+    with VirtualBus(4) as bus:
+        service = ModbusService(allow_write=True)
+        service.store.set(Table.HOLDING_REGISTERS, 0, [321])
+        service.slave_start(
+            SerialSettings(bus.ports[1], inter_frame_delay_ms=BUS_GAP_MS), SlaveConfig(slave_ids={9})
+        )
+        master_link = SerialSettings(bus.ports[2], inter_frame_delay_ms=BUS_GAP_MS, response_timeout_ms=500)
+        service.connect(master_link)
+        dispatcher = build_dispatcher(service)
+
+        from modbusai.modbus.master import ModbusMaster
+        from modbusai.modbus.records import FunctionCode, Request
+        from modbusai.transport.serial_link import SerialLink
+
+        stop = threading.Event()
+
+        def outside_master() -> None:
+            link = SerialLink(SerialSettings(bus.ports[0], inter_frame_delay_ms=BUS_GAP_MS, response_timeout_ms=500))
+            link.open()
+            master = ModbusMaster(link)
+            try:
+                while not stop.is_set():
+                    master.execute(Request(9, FunctionCode.READ_HOLDING_REGISTERS, 0, 1))
+                    stop.wait(0.05)
+            finally:
+                link.close()
+
+        traffic = threading.Thread(target=outside_master, daemon=True)
+        traffic.start()
+        try:
+            text, failed = call(dispatcher, "sniff", seconds=2, port=bus.ports[3], wait_s=30)
+            assert not failed, text
+            assert "cohabitent" not in text  # le résultat est là, pas l'avertissement
+            assert service.session.observations(["espion"])
+            assert service.connected
+            assert service.settings == master_link  # la liaison du maître n'a pas bougé
+        finally:
+            stop.set()
+            traffic.join(timeout=2)
+            service.shutdown()
+
+
+def test_sniffing_without_any_link_says_what_is_missing():
+    dispatcher = build_dispatcher(ModbusService())
+    text, failed = call(dispatcher, "sniff", seconds=2)
+    assert failed and "port" in text and "vitesse" in text

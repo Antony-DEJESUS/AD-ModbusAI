@@ -452,24 +452,39 @@ def _sniff(service: ModbusService) -> Tool:
         seconds = _float(args, "seconds", 10.0) or 10.0
         if not 1.0 <= seconds <= MAX_SNIFF_S:
             raise ToolError(f"« seconds » : entre 1 et {MAX_SNIFF_S:.0f}.")
-        job = Job("sniff", f"Écoute {seconds:.0f} s")
+        asked = link_settings(args) if str(args.get("port", "")).strip() else None
+        settings = service.sniff_settings(asked)
+        job = Job("sniff", f"Écoute {seconds:.0f} s sur {settings.port}")
 
         def work(current: Job) -> str:
-            return render.sniff_block(service.run_sniff(seconds, current), seconds)
+            return render.sniff_block(service.run_sniff(settings, seconds, current), seconds)
 
         service.start_job(job, work)
-        return _finish(job, _wait(args, seconds + 3.0), "La liaison du maître est fermée pendant l'écoute, puis rouverte.")
+        hint = (
+            "Un autre port que celui du maître : les deux cohabitent."
+            if service.settings is None or settings.port != getattr(service.settings, "port", None)
+            else "La liaison du maître est fermée pendant l'écoute, puis rouverte."
+        )
+        return _finish(job, _wait(args, seconds + 3.0), hint)
 
     schema = obj(
         {
             "seconds": {"type": "number", "default": 10, "description": f"Durée d'écoute, 1 à {MAX_SNIFF_S:.0f} s."},
+            "port": {"type": "string", "description": "Port série à écouter. Vide = celui du maître, qui est alors fermé le temps de l'écoute puis rouvert. Un second adaptateur branché en parallèle sur le bus permet d'écouter sans interrompre le maître."},
+            "baudrate": LINK_PROPERTIES["baudrate"],
+            "parity": LINK_PROPERTIES["parity"],
+            "stopbits": LINK_PROPERTIES["stopbits"],
+            "bytesize": LINK_PROPERTIES["bytesize"],
+            "frame_gap_ms": LINK_PROPERTIES["frame_gap_ms"],
+            "timeout_ms": {"type": "number", "default": 1000, "description": "Au-delà de ce délai sans réponse, une requête entendue est déclarée sans réponse."},
             "wait_s": {"type": "number", "description": "Attente maximale avant de rendre la main ; par défaut la durée d'écoute."},
         }
     )
     return _tool(
         "sniff",
         "Écoute passive du bus RS-485 : regarde le trafic d'un autre maître sans jamais émettre. "
-        "Dit qui interroge qui, à quel rythme, et qui ne répond pas. Modbus RTU uniquement.",
+        "Dit qui interroge qui, à quel rythme, et qui ne répond pas. Vitesse et parité doivent être "
+        "celles du bus écouté, sinon les trames sortent en « invalide ». Modbus RTU uniquement.",
         schema,
         run,
     )

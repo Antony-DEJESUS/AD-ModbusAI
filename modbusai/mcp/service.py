@@ -44,7 +44,7 @@ from modbusai.modbus.records import ExchangeRecord, FunctionCode, Request
 from modbusai.modbus.slave import DataStore, SlaveConfig, SlaveHandler
 from modbusai.modbus.tcp_slave import make_tcp_frame_handler
 from modbusai.roles import Occupancy, Role, can_start, port_key
-from modbusai.transport.records import LinkSettings, TcpSettings, TransportError
+from modbusai.transport.records import LinkSettings, SerialSettings, TcpSettings, TransportError
 from modbusai.transport.serial_link import SerialLink
 from modbusai.transport.tcp_link import TcpLink
 from modbusai.transport.tcp_server import TcpServer
@@ -480,21 +480,34 @@ class ModbusService:
         return report
 
     # ------------------------------------------------------------- espion
-    def run_sniff(self, seconds: float, job: Job) -> list[Transaction]:
-        """Écoute passive : le port est ouvert sans droit d'émettre.
-
-        Si l'écoute vise le port déjà tenu par le maître, la liaison maître est
-        fermée d'abord et rouverte à la fin, comme le fait la fenêtre.
-        """
-        settings = self._settings
-        if settings is None:
-            raise ToolError("Liaison fermée : appelez d'abord l'outil « connect ».")
-        if isinstance(settings, TcpSettings):
+    def sniff_settings(self, settings: LinkSettings | None) -> SerialSettings:
+        """Liaison de l'écoute : celle demandée, sinon celle du maître."""
+        chosen = settings if settings is not None else self._settings
+        if chosen is None:
+            raise ToolError(
+                "Aucune liaison : donnez le port et la vitesse du bus à écouter, ou connectez d'abord le maître."
+            )
+        if not isinstance(chosen, SerialSettings):
             raise ToolError(
                 "L'espion n'existe qu'en Modbus RTU : en TCP il faudrait une recopie de port sur le commutateur."
             )
+        return chosen
+
+    def run_sniff(self, settings: SerialSettings, seconds: float, job: Job) -> list[Transaction]:
+        """Écoute passive : le port est ouvert sans droit d'émettre.
+
+        Si l'écoute vise le port déjà tenu par le maître, cette liaison est
+        fermée d'abord et rouverte à la fin, comme le fait la fenêtre. Sur un
+        autre port, le maître n'est pas touché : les deux cohabitent.
+        """
         with self._lock:
-            self._close()
+            others = self.occupancies()
+            if self.connected and port_key(self._settings) == port_key(settings):
+                self._close()  # l'espion prend la place du maître sur ce port
+            else:
+                allowed, reason = can_start(Role.SNIFFER, port_key(settings), others)
+                if not allowed:
+                    raise ToolError(reason)
         decoder = PassiveDecoder(settings.response_timeout_ms)
         link = SerialLink(settings, allow_tx=False)
         link.open()
