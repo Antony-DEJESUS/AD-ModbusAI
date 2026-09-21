@@ -15,7 +15,7 @@ from typing import Any
 
 from modbusai import APP_TITLE
 from modbusai.analysis.campaign import CampaignSpec
-from modbusai.analysis.diagnostic import CATALOGUE, SCORE_EXPLANATION
+from modbusai.analysis.diagnostic import CATALOGUE, SCORE_EXPLANATION, HypothesisInfo
 from modbusai.analysis.observations import DEFAULT_SOURCES, SOURCE_TEST
 from modbusai.analysis.report import build_report
 from modbusai.analysis.scanner import ScanPlan
@@ -24,7 +24,7 @@ from modbusai.mcp import render
 from modbusai.mcp.protocol import Tool, ToolError, obj
 from modbusai.mcp.service import MAX_SNIFF_S, Job, ModbusService
 from modbusai.modbus.records import FunctionCode, Request
-from modbusai.modbus.slave import SlaveConfig, Table
+from modbusai.modbus.slave import TABLE_SIZE, SlaveConfig, Table
 from modbusai.transport.ports import list_serial_ports
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
 
@@ -41,6 +41,7 @@ TABLES = {
     "input": Table.INPUT_REGISTERS,
 }
 FORMATS = ("registres", "entier32", "flottant32", "entier64", "flottant64")
+MAX_SET_VALUES = 1000  # au-delà, c'est un remplissage : passer par l'application
 ORDERS = ("ABCD", "CDAB", "BADC", "DCBA")
 
 INSTRUCTIONS = f"""{APP_TITLE} : diagnostic Modbus RTU / RS-485 et Modbus TCP sur le bus réel.
@@ -681,7 +682,7 @@ def _catalogue() -> Tool:
     )
 
 
-def _fiche(key: str, info: Any) -> str:
+def _fiche(key: str, info: HypothesisInfo) -> str:
     lines = [f"[{key}] {info.title}", f"  {info.summary}", f"  Déclenchement : {info.trigger}", "  Causes classiques :"]
     lines += [f"    - {c}" for c in info.causes]
     lines.append("  Pour confirmer :")
@@ -753,8 +754,14 @@ def _slave_set(service: ModbusService) -> Tool:
         table = TABLES[_choice(args, "table", tuple(TABLES), "holding")]
         address = _int(args, "address", 0, 0, 65535)
         values = _values(args)
+        if len(values) > MAX_SET_VALUES:
+            raise ToolError(f"Argument « values » : {MAX_SET_VALUES} valeurs au plus par appel.")
+        if address + len(values) > TABLE_SIZE:
+            raise ToolError(f"Adresse {address} + {len(values)} valeurs dépasse la table ({TABLE_SIZE} éléments).")
         if table.is_bits:
             values = tuple(1 if v else 0 for v in values)
+        elif any(not 0 <= v <= 0xFFFF for v in values):
+            raise ToolError("Argument « values » : registres 0..65535 attendus.")
         service.store.set(table, address, list(values))
         shown = ", ".join(str(v) for v in values[:12]) + (" ..." if len(values) > 12 else "")
         return f"{table.label} : {len(values)} valeur(s) écrite(s) à partir de l'adresse {address} (base 0) : {shown}"

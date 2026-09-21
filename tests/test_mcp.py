@@ -462,3 +462,35 @@ def test_sweeping_the_settings_restores_the_original_link():
             assert service.connected
         finally:
             service.shutdown()
+
+
+def test_writing_a_coil_goes_through_and_reads_back():
+    """Les bobines passent par FC05 ou FC15 selon le nombre de valeurs."""
+    with VirtualBus(2) as bus:
+        service = connected_pair(bus, {7}, [0])
+        dispatcher = build_dispatcher(service)
+        try:
+            text, failed = call(dispatcher, "write", slave=7, type="coil", address=3, values=[1])
+            assert not failed, text
+            assert service.store.get(Table.COILS, 3, 1) == [1]
+
+            text, failed = call(dispatcher, "write", slave=7, type="coil", address=8, values=[1, 0, 1])
+            assert not failed, text
+            assert service.store.get(Table.COILS, 8, 3) == [1, 0, 1]
+
+            text, failed = call(dispatcher, "read", slave=7, type="coil", address=8, count=3)
+            assert not failed, text
+            assert "8=1" in text and "9=0" in text and "10=1" in text
+        finally:
+            service.shutdown()
+
+
+def test_out_of_range_writes_are_refused_with_a_readable_message():
+    service = ModbusService(allow_write=True)
+    dispatcher = build_dispatcher(service)
+    text, failed = call(dispatcher, "slave_set", table="holding", address=65535, values=[1, 2, 3])
+    assert failed and "dépasse la table" in text
+    text, failed = call(dispatcher, "slave_set", table="holding", address=0, values=[70000])
+    assert failed and "0..65535" in text
+    text, failed = call(dispatcher, "slave_set", table="holding", address=0, values=list(range(1001)))
+    assert failed and "au plus par appel" in text
