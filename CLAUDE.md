@@ -73,6 +73,8 @@ modbusai/ui/                   couche 3 : Qt uniquement
                                log_console (colonnes fixes + en-tête), config_dialog, about_dialog
 assets/                        marque mark-*.png (A + « AD »), icône .ico (A sur fond d'accent) ; source/ = artwork d'origine, non embarqué
 tools/make_logo.py             régénère marque et icône, --accent donne sa couleur à chaque outil de la gamme
+tools/release_notes.py         section du CHANGELOG d'une version, et contrôle tag <-> __version__
+.github/workflows/             tests.yml (lint et tests) et release.yml (exécutables + release sur tag)
 tests/                         pytest ; fake_slave.py (esclave sur pty), virtual_bus.py (bus RS-485 virtuel)
 packaging/modbusai.spec        PyInstaller : AD-ModbusAI_v<version> (fenêtré) et AD-ModbusAI-MCP_v<version> (console)
 docs/                          propositions, plan, compte rendu de phase, mode d'emploi PDF, mcp.md (mise en service)
@@ -230,7 +232,9 @@ docs/manuel/                   captures.py (captures sur bus virtuel) et build_m
   dans `pyproject.toml` (un test vérifie qu'ils s'accordent), puis ajouter une
   entrée dans `CHANGELOG.md`. Les phases 1 à 3 ont porté les versions 0.1 à
   0.3 ; depuis la 1.0.0 : X = rupture (architecture ou format des données),
-  Y = nouvelle fonction, Z = correction.
+  Y = nouvelle fonction, Z = correction. Publier = poser le tag `vX.Y.Z` :
+  la CI refuse un tag qui ne porte pas `__version__` ou dont la section de
+  CHANGELOG manque, puis construit et publie.
 - Lint : `ruff check .` (config dans `pyproject.toml`, ligne 120).
 
 ## Commandes

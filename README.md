@@ -67,6 +67,18 @@ serveur n'embarque aucune bibliothèque graphique et pèse donc bien moins.
 
 Puis, côté client : `claude mcp add modbusai -- <chemin de l'exécutable>`.
 
+## Publier une version
+
+Tout est automatique à partir du tag : la CI vérifie que le tag porte bien la
+version de `modbusai/__init__.py`, joue lint et tests, construit les deux
+exécutables Windows, vérifie que le serveur MCP répond, puis crée la release
+avec les exécutables, le mode d'emploi PDF et la section du CHANGELOG en corps.
+
+```powershell
+git tag v1.1.0
+git push origin v1.1.0
+```
+
 ## Tests
 
 ```powershell

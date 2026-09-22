@@ -9,7 +9,7 @@ titre et le nom de l'exécutable.
 
 - **Serveur MCP** (`python -m modbusai.mcp`, exécutable `AD-ModbusAI-MCP`) :
   un assistant comme Claude Code appelle directement les outils du bus au lieu
-  de lire un rapport collé à la main. Vingt et un outils : ouvrir la liaison,
+  de lire un rapport collé à la main. Vingt-deux outils : ouvrir la liaison,
   lire, écrire, scanner, identifier, écouter le bus, lancer une campagne ou un
   test de torture, analyser, produire le rapport, piloter le serveur esclave
   simulé. La boucle « hypothèse, test qui départage, nouvelle hypothèse » se
@@ -40,6 +40,11 @@ titre et le nom de l'exécutable.
   nouvelle, et l'exécutable du serveur n'embarque pas Qt.
 - `modbusai/roles.py` quitte la couche `ui` : l'arbitrage « un port, un rôle »
   vaut pour la fenêtre comme pour le serveur MCP.
+- **Publication automatique** : poser le tag `vX.Y.Z` suffit. La CI vérifie
+  que le tag porte la version du paquet, joue lint et tests sous Linux et
+  Windows, construit les deux exécutables, vérifie que le serveur MCP
+  répond à la poignée de main, puis crée la release avec les exécutables,
+  le mode d'emploi et la section du CHANGELOG en corps.
 - L'exécutable est maintenant double : l'application reste fenêtrée, le serveur
   MCP est en console, faute de quoi il n'aurait ni entrée ni sortie standard.
 
