@@ -5,27 +5,22 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
-## 1.3.0 - La grille du serveur esclave dit ce qui bouge
+## 1.3.0 - L'onglet MAÎTRE dit quel registre bouge
 
-Retour de chantier : en phase de test, on veut voir ce qu'une supervision
-écrit sans naviguer dans 65 536 registres.
+Retour de chantier : en lecture cyclique sur un équipement, on cherche quel
+registre change, et on ne veut pas parcourir une longue table pour le trouver.
 
-- **Une valeur qui change s'éclaire en vert pendant cinq secondes**, quelle que
-  soit l'origine du changement : écriture d'un maître, remplissage, animation.
-  Le vert tient assez longtemps pour survivre au temps qu'on met à regarder
-  ailleurs.
-- **Une cellule simplement lue garde une teinte discrète**, deux secondes. Sous
-  une supervision qui interroge en boucle, tout le tableau s'allumait en
-  permanence et les vrais événements se perdaient dedans ; on distingue
-  maintenant d'un coup d'œil ce qui est lu de ce qui est écrit.
-- **Masquer les lignes à zéro** : une case à cocher n'affiche que les lignes
-  portant au moins une valeur non nulle. Une ligne réapparaît d'elle-même dès
-  qu'une de ses valeurs cesse d'être nulle.
-- Une valeur saisie à la main ne s'éclaire pas : elle vient de l'opérateur,
-  inutile de la lui signaler.
-- Correction : la hauteur des lignes de la grille était une constante en
-  pixels. À 125 ou 150 %, Windows agrandit la police et pas la constante, le
-  texte des en-têtes était rogné ; elle se calcule maintenant sur la police.
+- **Une valeur qui change s'éclaire en vert pendant cinq secondes.** La
+  comparaison porte sur la lecture précédente de la MÊME requête : changer
+  d'esclave, d'adresse ou de longueur repart de zéro plutôt que de tout faire
+  clignoter. En lecture cyclique, le vert tient assez longtemps pour survivre
+  au temps qu'on met à regarder ailleurs.
+- **Masquer les zéros** : une case du panneau d'actions n'affiche que les
+  lignes portant une valeur. Les lignes masquées ne sont pas retirées de la
+  grille : l'écriture les relit pour composer le bloc envoyé, en supprimer
+  décalerait les valeurs écrites dans l'automate.
+- Une ligne de 32 ou 64 bits s'éclaire dès que l'un de ses registres bouge, et
+  n'est masquée que si tous valent zéro.
 
 ## 1.2.0 - Mode d'emploi embarqué
 

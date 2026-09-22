@@ -31,6 +31,10 @@ class MasterPage(QWidget):
         self._last_values: tuple[int, ...] | None = None
         self._last_start = 0
         self._last_is_bits = False
+        # Lecture précédente et sa signature : on ne compare que des lectures
+        # comparables, sinon changer de requête ferait tout clignoter.
+        self._previous_values: tuple[int, ...] | None = None
+        self._previous_key: tuple[int, int, bool] | None = None
         self._resume_cycle = False
 
         self.request_bar = RequestBar()
@@ -70,6 +74,7 @@ class MasterPage(QWidget):
         self.actions.write_requested.connect(self._write)
         self.actions.stop_cycle_requested.connect(self.stop_cycle)
         self.actions.display_changed.connect(self._refresh_grid)
+        self.actions.zero_filter_changed.connect(self.grid.set_hide_zeros)
         self.actions.cyclic.toggled.connect(lambda checked: None if checked else self.stop_cycle())
         self.exchange.clear_requested.connect(self._clear)
         self.log_panel.copied.connect(
@@ -178,10 +183,11 @@ class MasterPage(QWidget):
         self.exchange.show_record(rec)
         if rec.ok:
             if rec.values is not None and rec.request.function in (1, 2, 3, 4):
+                changed = self._changed_offsets(rec)
                 self._last_values = rec.values
                 self._last_start = rec.request.address
                 self._last_is_bits = rec.request.function in (1, 2)
-                self._refresh_grid()
+                self._refresh_grid(changed)
             self.status_message.emit(
                 tr("Status : {p0}  -  {p1:.1f} ms").format(p0=rec.status.name, p1=rec.response_time_ms)
             )
@@ -209,9 +215,31 @@ class MasterPage(QWidget):
         self.actions.set_bits_mode(reg_type.is_bits)
         self.actions.set_writable(reg_type.writable)
         self._last_values = None
+        self._forget_previous()
         self._refresh_grid()
 
-    def _refresh_grid(self) -> None:
+    def _forget_previous(self) -> None:
+        """Les lignes ne désignent plus les mêmes registres : rien à comparer,
+        rien à laisser allumé."""
+        self._previous_values = None
+        self._previous_key = None
+        self.grid.clear_flashes()
+
+    def _changed_offsets(self, rec: ExchangeRecord) -> set[int]:
+        """Rangs des valeurs qui ont bougé depuis la lecture précédente."""
+        values = rec.values or ()
+        key = (rec.request.address, len(values), rec.request.function in (1, 2))
+        changed: set[int] = set()
+        if self._previous_key == key and self._previous_values is not None:
+            changed = {
+                offset
+                for offset, (before, now) in enumerate(zip(self._previous_values, values, strict=False))
+                if before != now
+            }
+        self._previous_values, self._previous_key = values, key
+        return changed
+
+    def _refresh_grid(self, changed: set[int] | None = None) -> None:
         rb = self.request_bar
         reg_type = rb.current_type
         count = rb.count.value()
@@ -225,14 +253,46 @@ class MasterPage(QWidget):
             if reg_type.is_bits
             else codec.format_registers(values, start, self._display_options())
         )
-        self.grid.show_rows(rows, () if stale else _extras(rows, values, start, reg_type.is_bits))
+        self.grid.show_rows(
+            rows,
+            () if stale else _extras(rows, values, start, reg_type.is_bits),
+            () if stale else _zero_rows(rows, values, start),
+        )
         self.grid.mark_stale(stale)
+        if changed and not stale:
+            self.grid.flash(_rows_covering(rows, start, changed))
 
     def _clear(self) -> None:
         self.console.clear()
         self.exchange.clear()
         self._last_values = None
+        self._forget_previous()
         self._refresh_grid()
+
+
+def _zero_rows(rows, values, start: int) -> list[bool]:
+    """Lignes dont TOUS les registres couverts valent zéro : celles que le
+    filtre peut masquer sans rien cacher d'utile."""
+    return [
+        all(_value_at(values, start, addr) == 0 for addr in range(row.address, row.address + max(1, row.span)))
+        for row in rows
+    ]
+
+
+def _rows_covering(rows, start: int, changed: set[int]) -> set[int]:
+    """Rangs de valeurs qui ont bougé -> lignes de la grille qui les portent.
+    Une ligne peut couvrir deux ou quatre registres (mot 32 ou 64 bits)."""
+    addresses = {start + offset for offset in changed}
+    return {
+        index
+        for index, row in enumerate(rows)
+        if any(addr in addresses for addr in range(row.address, row.address + max(1, row.span)))
+    }
+
+
+def _value_at(values, start: int, address: int) -> int:
+    offset = address - start
+    return values[offset] if 0 <= offset < len(values) else 0
 
 
 def _extras(rows, values, start: int, is_bits: bool) -> list[tuple[str, str]]:
