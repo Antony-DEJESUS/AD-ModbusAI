@@ -84,7 +84,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${{ github.event.inputs.tag || github.ref_name }}"
-          fichiers=(dist/*.exe docs/AD-ModbusAI_Mode_d_emploi_*.pdf)
+          version="${tag#v}"
+          manuel="docs/AD-ModbusAI_Mode_d_emploi_v${version}.pdf"
+          # Le mode d'emploi de CETTE version, jamais un PDF resté d'une
+          # précédente : une release ne doit pas livrer une notice périmée.
+          if [ ! -f "$manuel" ]; then
+            echo "Mode d'emploi absent : $manuel — lancer docs/manuel/build_manuel.py" >&2
+            exit 1
+          fi
+          fichiers=(dist/*.exe "$manuel")
           if gh release view "$tag" >/dev/null 2>&1; then
             # Relance sur un tag déjà publié : on remplace les fichiers.
             gh release upload "$tag" "${fichiers[@]}" --clobber

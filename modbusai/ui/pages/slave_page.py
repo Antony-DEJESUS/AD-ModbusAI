@@ -30,7 +30,7 @@ from modbusai.modbus.slave import TABLE_SIZE, DataStore, HandledRequest, SlaveCo
 from modbusai.transport.netinfo import is_wildcard, local_ipv4_addresses
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
 from modbusai.ui.iconography import set_icon
-from modbusai.ui.metrics import text_width, use_tabular_figures
+from modbusai.ui.metrics import line_height, text_width, use_tabular_figures
 from modbusai.ui.palette import State, color
 from modbusai.ui.style import PAGE_MARGINS
 from modbusai.ui.widgets.labels import section
@@ -38,7 +38,15 @@ from modbusai.ui.widgets.log_console import SLAVE_COLUMNS, LogPanel
 from modbusai.ui.widgets.stat_tiles import StatTiles
 
 COLUMNS = 10
-FLASH_S = 2.0  # durée de l'éclairage vert d'une cellule lue ou écrite
+READ_FLASH_S = 2.0
+"""Une cellule simplement lue par le maître s'éclaire d'une teinte discrète :
+sous une supervision qui interroge en boucle, tout le tableau serait sinon
+allumé en permanence et les vrais événements se perdraient dedans."""
+
+CHANGE_FLASH_S = 5.0
+"""Une valeur qui CHANGE s'éclaire en vert franc, plus longtemps : c'est le
+signal qu'on cherche en phase de test, il doit survivre au temps qu'on met à
+regarder ailleurs."""
 
 
 def listen_description(settings: LinkSettings) -> str:
@@ -84,15 +92,27 @@ class RegisterTableModel(QAbstractTableModel):
         self.rows = 100
         self.fmt = CellFormat.DEC_SIGNED
         self._seen_version = -1
-        self._touched: dict[tuple[Table, int], float] = {}  # (table, adresse) -> instant de fin d'animation
+        # (table, adresse) -> (instant de fin d'animation, la valeur a changé)
+        self._touched: dict[tuple[Table, int], tuple[float, bool]] = {}
+        self._snapshot: list[int] = []  # valeurs de la plage visible, pour repérer ce qui change
+        self._snapshot_key: tuple[Table, int, int] | None = None
+        self.hide_zero_rows = False
+        self._rows_map: list[int] | None = None  # décalages de ligne affichés quand on filtre
 
     # ------------------------------------------------------- animation
-    def touch(self, table: Table, address: int, count: int) -> None:
-        """Marque une zone lue ou écrite par un maître : elle s'éclaire en vert
-        puis s'éteint progressivement (voir FLASH_S)."""
-        end = time.monotonic() + FLASH_S
+    def touch(self, table: Table, address: int, count: int, changed: bool = False) -> None:
+        """Marque une zone lue par un maître, ou dont la valeur vient de changer.
+
+        Un changement l'emporte toujours sur une simple lecture : une écriture
+        touche la même zone que la lecture qui la suit, et c'est le changement
+        qu'il faut voir.
+        """
+        end = time.monotonic() + (CHANGE_FLASH_S if changed else READ_FLASH_S)
         for addr in range(address, min(address + count, TABLE_SIZE)):
-            self._touched[(table, addr)] = end
+            previous = self._touched.get((table, addr))
+            if previous is not None and previous[1] and not changed:
+                continue  # ne pas rabaisser un changement en cours au rang de lecture
+            self._touched[(table, addr)] = (end, changed)
 
     def flashing(self) -> bool:
         return bool(self._touched)
@@ -100,14 +120,16 @@ class RegisterTableModel(QAbstractTableModel):
     def tick_flashes(self) -> None:
         """Rafraîchit les lignes animées et oublie celles qui sont éteintes."""
         now = time.monotonic()
-        expired = [key for key, end in self._touched.items() if end <= now]
+        expired = [key for key, (end, _) in self._touched.items() if end <= now]
         for key in expired:
             del self._touched[key]
-        rows = {
-            (addr - self.start) // COLUMNS
-            for (table, addr) in list(self._touched) + expired
-            if table is self.table and self.start <= addr < self.start + self.rows * COLUMNS
-        }
+        rows = set()
+        for table, addr in list(self._touched) + expired:
+            if table is not self.table:
+                continue
+            row = self._row_of(addr)
+            if row is not None:
+                rows.add(row)
         for row in rows:
             if 0 <= row < self.rowCount():
                 self.dataChanged.emit(
@@ -115,45 +137,125 @@ class RegisterTableModel(QAbstractTableModel):
                 )
 
     def _flash_color(self, table: Table, address: int) -> QColor | None:
-        end = self._touched.get((table, address))
-        if end is None:
+        touched = self._touched.get((table, address))
+        if touched is None:
             return None
+        end, changed = touched
+        span = CHANGE_FLASH_S if changed else READ_FLASH_S
         remaining = end - time.monotonic()
         if remaining <= 0:
             return None
-        tint = QColor(color(State.OK))
-        tint.setAlphaF(min(1.0, 0.14 + 0.46 * (remaining / FLASH_S)))  # s'estompe en douceur
+        tint = QColor(color(State.OK if changed else State.MUTED))
+        peak = 0.60 if changed else 0.26  # une lecture reste discrète, un changement saute aux yeux
+        tint.setAlphaF(min(1.0, 0.10 + (peak - 0.10) * (remaining / span)))  # s'estompe en douceur
         return tint
 
     # ------------------------------------------------------------- config
-    def configure(self, table: Table, start: int, rows: int, fmt: CellFormat) -> None:
+    def configure(self, table: Table, start: int, rows: int, fmt: CellFormat, hide_zero_rows: bool = False) -> None:
         self.beginResetModel()
         self.table, self.start, self.rows, self.fmt = table, start, rows, fmt
+        self.hide_zero_rows = hide_zero_rows
+        self._resync(rebuild_rows=True)
         self.endResetModel()
 
     def refresh_if_changed(self) -> None:
-        if self.store.version != self._seen_version:
-            self._seen_version = self.store.version
-            top, bottom = self.index(0, 0), self.index(self.rowCount() - 1, COLUMNS - 1)
-            self.dataChanged.emit(top, bottom, [Qt.ItemDataRole.DisplayRole])
+        """Compare la plage visible à sa photo précédente : ce qui a bougé
+        s'éclaire. Fonctionne quelle que soit l'origine du changement, écriture
+        d'un maître, remplissage ou animation."""
+        if self.store.version == self._seen_version:
+            return
+        self._seen_version = self.store.version
+        start, count = self.visible_range()
+        values = self.store.get(self.table, start, count)
+        if self._snapshot_key == (self.table, start, count):
+            for offset, (before, now) in enumerate(zip(self._snapshot, values, strict=False)):
+                if before != now:
+                    self.touch(self.table, start + offset, 1, changed=True)
+        self._snapshot_key = (self.table, start, count)
+        self._snapshot = values
+        if self.hide_zero_rows and self._rebuild_rows():
+            return  # les lignes visibles ont changé : le modèle a été réinitialisé
+        top, bottom = self.index(0, 0), self.index(max(0, self.rowCount() - 1), COLUMNS - 1)
+        self.dataChanged.emit(top, bottom, [Qt.ItemDataRole.DisplayRole])
 
     def visible_range(self) -> tuple[int, int]:
         count = min(self.rows * COLUMNS, TABLE_SIZE - self.start)
         return self.start, count
 
+    # ------------------------------------------------- lignes tout à zéro
+    def set_hide_zero_rows(self, hide: bool) -> None:
+        if hide == self.hide_zero_rows:
+            return
+        self.beginResetModel()
+        self.hide_zero_rows = hide
+        self._resync(rebuild_rows=True)
+        self.endResetModel()
+
+    def _resync(self, rebuild_rows: bool = False) -> None:
+        """Reprend la photo de la plage visible sans rien éclairer : après un
+        changement de plage ou une saisie, il n'y a pas de « changement » à
+        signaler, seulement une nouvelle référence."""
+        start, count = self.visible_range()
+        self._snapshot = self.store.get(self.table, start, count)
+        self._snapshot_key = (self.table, start, count)
+        self._seen_version = self.store.version
+        if rebuild_rows:
+            self._rows_map = self._zero_free_rows() if self.hide_zero_rows else None
+
+    def _zero_free_rows(self) -> list[int]:
+        """Décalages des lignes qui portent au moins une valeur non nulle."""
+        start, count = self.visible_range()
+        values = self.store.get(self.table, start, count)
+        return [
+            row
+            for row in range((count + COLUMNS - 1) // COLUMNS)
+            if any(values[row * COLUMNS : (row + 1) * COLUMNS])
+        ]
+
+    def _rebuild_rows(self) -> bool:
+        """Recalcule les lignes visibles ; True si elles ont changé (le modèle
+        a alors été réinitialisé, l'appelant n'a plus rien à émettre)."""
+        wanted = self._zero_free_rows()
+        if wanted == self._rows_map:
+            return False
+        self.beginResetModel()
+        self._rows_map = wanted
+        self.endResetModel()
+        return True
+
+    def _row_offset(self, row: int) -> int:
+        """Ligne affichée -> décalage réel dans la plage."""
+        if self._rows_map is None:
+            return row
+        return self._rows_map[row] if 0 <= row < len(self._rows_map) else -1
+
+    def _row_of(self, address: int) -> int | None:
+        """Adresse -> ligne affichée, ou None si elle n'est pas à l'écran."""
+        start, count = self.visible_range()
+        if not start <= address < start + count:
+            return None
+        offset = (address - start) // COLUMNS
+        if self._rows_map is None:
+            return offset
+        try:
+            return self._rows_map.index(offset)
+        except ValueError:
+            return None
+
     # ---------------------------------------------------------- Qt model
     def rowCount(self, parent: QModelIndex | None = None) -> int:
-        return (
-            0
-            if parent is not None and parent.isValid()
-            else max(0, min(self.rows, (TABLE_SIZE - self.start + COLUMNS - 1) // COLUMNS))
-        )
+        if parent is not None and parent.isValid():
+            return 0
+        if self._rows_map is not None:
+            return len(self._rows_map)
+        return max(0, min(self.rows, (TABLE_SIZE - self.start + COLUMNS - 1) // COLUMNS))
 
     def columnCount(self, parent: QModelIndex | None = None) -> int:
         return 0 if parent is not None and parent.isValid() else COLUMNS
 
     def _address(self, index: QModelIndex) -> int:
-        return self.start + index.row() * COLUMNS + index.column()
+        offset = self._row_offset(index.row())
+        return TABLE_SIZE if offset < 0 else self.start + offset * COLUMNS + index.column()
 
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
@@ -184,7 +286,7 @@ class RegisterTableModel(QAbstractTableModel):
         except ValueError:
             return False
         self.store.set(self.table, addr, [v])
-        self._seen_version = self.store.version
+        self._resync()  # la valeur vient de l'opérateur : inutile de la lui signaler
         self.dataChanged.emit(index, index, [Qt.ItemDataRole.DisplayRole])
         return True
 
@@ -196,7 +298,10 @@ class RegisterTableModel(QAbstractTableModel):
             return None
         if orientation == Qt.Orientation.Horizontal:
             return f"+{section}"
-        first = self.start + section * COLUMNS
+        offset = self._row_offset(section)
+        if offset < 0:
+            return None
+        first = self.start + offset * COLUMNS
         last = min(first + COLUMNS - 1, TABLE_SIZE - 1)
         p = self.table.prefix
         return f"{p}{first + 1:05d}-{p}{last + 1:05d}"
@@ -363,6 +468,10 @@ class SlavePage(QWidget):
         self.rows = QSpinBox()
         self.rows.setRange(1, TABLE_SIZE // COLUMNS)
         self.rows.setValue(100)
+        self.hide_zeros = QCheckBox(tr("Masquer les lignes à zéro"))
+        self.hide_zeros.setToolTip(
+            tr("N'affiche que les lignes portant au moins une valeur non nulle : on voit d'un coup ce qui est écrit.")
+        )
         self.fill_value = QSpinBox()
         self.fill_value.setRange(0, 65535)
         self.fill_btn = QPushButton(tr("REMPLIR la plage visible"))
@@ -386,6 +495,7 @@ class SlavePage(QWidget):
         ):
             table_row.addWidget(QLabel(label))
             table_row.addWidget(w)
+        table_row.addWidget(self.hide_zeros)
         table_row.addSpacing(12)
         table_row.addWidget(QLabel(tr("Valeur")))
         table_row.addWidget(self.fill_value)
@@ -399,7 +509,7 @@ class SlavePage(QWidget):
         self.view = QTableView()
         self.view.setModel(self.model)
         self.view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.view.verticalHeader().setDefaultSectionSize(22)
+        self.view.verticalHeader().setDefaultSectionSize(line_height(self.view, extra=8))
         self.view.setAlternatingRowColors(False)
         use_tabular_figures(self.view)
 
@@ -440,6 +550,7 @@ class SlavePage(QWidget):
             w.currentIndexChanged.connect(lambda _i: self._reconfigure())
         self.start.valueChanged.connect(lambda _v: self._reconfigure())
         self.rows.valueChanged.connect(lambda _v: self._reconfigure())
+        self.hide_zeros.toggled.connect(self._on_hide_zeros)
         self.fill_btn.clicked.connect(self._fill)
         self.zero_btn.clicked.connect(self._zero)
         self.animation.currentIndexChanged.connect(lambda _i: self._update_animation())
@@ -453,7 +564,7 @@ class SlavePage(QWidget):
         self._flash_timer = QTimer(self)
         self._flash_timer.timeout.connect(self._tick_flashes)
         self._refresh_timer = QTimer(self)
-        self._refresh_timer.timeout.connect(self.model.refresh_if_changed)
+        self._refresh_timer.timeout.connect(self._refresh_table)
         self._refresh_timer.start(300)
         self._anim_timer = QTimer(self)
         self._anim_timer.timeout.connect(self._animate)
@@ -464,6 +575,19 @@ class SlavePage(QWidget):
         self.model.tick_flashes()
         if not self.model.flashing():
             self._flash_timer.stop()
+
+    def _refresh_table(self) -> None:
+        """Le modèle repère lui-même ce qui a changé : il faut alors que
+        l'animation tourne, même si aucune requête n'est passée par la page."""
+        self.model.refresh_if_changed()
+        self._ensure_flashing()
+
+    def _ensure_flashing(self) -> None:
+        if self.model.flashing() and not self._flash_timer.isActive():
+            self._flash_timer.start(80)
+
+    def _on_hide_zeros(self, hide: bool) -> None:
+        self.model.set_hide_zero_rows(hide)
 
     # ============================================================== config
     def config(self) -> SlaveConfig:

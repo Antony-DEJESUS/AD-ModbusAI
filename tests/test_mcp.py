@@ -571,7 +571,9 @@ def test_a_suggested_test_runs_and_is_compared_to_the_reference():
             keys = [line.split("«")[1].split("»")[0].strip() for line in text.splitlines() if "test «" in line]
             assert keys, text
 
-            runnable = [k for k in keys if k in ("timeout_x2", "period", "slow_baud", "parity_even", "stop2", "gap20")]
+            # On choisit un test qui ne touche pas à la vitesse : un pseudo-terminal
+            # refuse certains débits, et ce n'est pas ce qu'on veut éprouver ici.
+            runnable = [k for k in keys if k in ("period", "timeout_x2")]
             assert runnable, keys
             text, failed = call(
                 dispatcher, "run_test", test=runnable[0], slave=7, max_count=20, duration_s=None, wait_s=90

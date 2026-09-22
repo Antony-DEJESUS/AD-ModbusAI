@@ -377,6 +377,8 @@ EN: dict[str, str] = {
     "Aucune animation": "No animation",
     "Incrémenter la plage visible": "Increment the visible range",
     "Incrémenter de 10": "Increment by 10",
+    "Masquer les lignes à zéro": "Hide all-zero rows",
+    "N'affiche que les lignes portant au moins une valeur non nulle : on voit d'un coup ce qui est écrit.": "Shows only the rows holding at least one non-zero value: what is being written stands out at once.",
     "Journaliser les requêtes": "Log requests",
     "Journal esclave copié ({p0} lignes)": "Slave log copied ({p0} lines)",
     "Serveur actif sur {p0}": "Server active on {p0}",

@@ -5,6 +5,28 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 1.3.0 - La grille du serveur esclave dit ce qui bouge
+
+Retour de chantier : en phase de test, on veut voir ce qu'une supervision
+écrit sans naviguer dans 65 536 registres.
+
+- **Une valeur qui change s'éclaire en vert pendant cinq secondes**, quelle que
+  soit l'origine du changement : écriture d'un maître, remplissage, animation.
+  Le vert tient assez longtemps pour survivre au temps qu'on met à regarder
+  ailleurs.
+- **Une cellule simplement lue garde une teinte discrète**, deux secondes. Sous
+  une supervision qui interroge en boucle, tout le tableau s'allumait en
+  permanence et les vrais événements se perdaient dedans ; on distingue
+  maintenant d'un coup d'œil ce qui est lu de ce qui est écrit.
+- **Masquer les lignes à zéro** : une case à cocher n'affiche que les lignes
+  portant au moins une valeur non nulle. Une ligne réapparaît d'elle-même dès
+  qu'une de ses valeurs cesse d'être nulle.
+- Une valeur saisie à la main ne s'éclaire pas : elle vient de l'opérateur,
+  inutile de la lui signaler.
+- Correction : la hauteur des lignes de la grille était une constante en
+  pixels. À 125 ou 150 %, Windows agrandit la police et pas la constante, le
+  texte des en-têtes était rogné ; elle se calcule maintenant sur la police.
+
 ## 1.2.0 - Mode d'emploi embarqué
 
 - **Mode d'emploi PDF dans l'exécutable** : le bouton MODE D'EMPLOI (PDF) de

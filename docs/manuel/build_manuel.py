@@ -571,7 +571,7 @@ TRAMES ÉCHANGÉES (505 lignes)
 def s8_esclave() -> str:
     return (
         h1("8", "Onglet SERVEUR ESCLAVE")
-        + img("esclave", "Le serveur sert les esclaves 7 et 12 ; les registres qu'un maître vient de lire sont éclairés en vert.")
+        + img("esclave", "Le serveur sert les esclaves 7 et 12 ; une valeur qui change s'éclaire en vert, une simple lecture reste discrète.")
         + "<h2>8.1 Sa propre liaison</h2>"
         + "<p>Le serveur ne dépend pas du bandeau : le groupe <span class='k'>LIAISON</span> choisit son protocole "
         "(RTU ou TCP) et <b>CONFIGURER</b> ouvre le même dialogue que pour le maître, avec ses propres réglages, "
@@ -596,8 +596,14 @@ def s8_esclave() -> str:
         "<b>REMPLIR la plage visible</b> met la <b>Valeur</b> partout dans la zone affichée, <b>RAZ table</b> remet toute "
         "la table à zéro, l'<b>animation</b> incrémente la plage visible à la période choisie pour donner de la vie "
         "à une supervision en test.</p>"
-        + "<p>Ce qu'un maître vient de <b>lire ou d'écrire s'éclaire en vert</b> pendant deux secondes, puis s'éteint "
-        "progressivement : on voit d'un coup d'œil ce que la GTB interroge réellement, et à quel rythme.</p>"
+        + "<p>La grille distingue deux choses. Une <b>valeur qui change s'éclaire en vert</b> pendant cinq secondes, "
+        "quelle que soit l'origine du changement : écriture d'un maître, remplissage, animation. Une cellule "
+        "<b>simplement lue</b> garde une teinte discrète pendant deux secondes. On voit ainsi du même coup d'œil ce "
+        "que la GTB interroge, à quel rythme, et ce qu'elle écrit vraiment — sans que le tableau entier s'allume sous "
+        "une supervision qui interroge en boucle.</p>"
+        + "<p><b>Masquer les lignes à zéro</b> n'affiche que les lignes portant au moins une valeur non nulle : plus "
+        "besoin de parcourir la table pour trouver ce qui est écrit. Une ligne réapparaît d'elle-même dès qu'une de "
+        "ses valeurs cesse d'être nulle.</p>"
         + "<h2>8.4 Écoute, maîtres connectés, journal</h2>"
         + "<p>En TCP, la ligne <b>Écoute</b> ne dit pas « 0.0.0.0:502 » mais « toutes les interfaces, port 502 — "
         "joignable sur 192.168.x.y:502 » : l'adresse à donner au superviseur. <b>Maîtres connectés</b> compte les "
