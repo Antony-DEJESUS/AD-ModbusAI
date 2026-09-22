@@ -3,12 +3,24 @@ historique des versions (CHANGELOG) et mode d'emploi."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QTabWidget, QTextBrowser, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import (
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QTabWidget,
+    QTextBrowser,
+    QVBoxLayout,
+    QWidget,
+)
 
 from modbusai import APP_NAME, APP_TITLE, __version__
 from modbusai.i18n import tr
-from modbusai.ui.resources import changelog_text, logo_pixmap
+from modbusai.ui.iconography import set_icon
+from modbusai.ui.resources import changelog_text, logo_pixmap, manual_for_viewer, manual_pdf_path
 
 AUTHOR = "Antony DE JESUS"
 
@@ -82,7 +94,7 @@ def manual_html() -> str:
     ]
     html = [
         f"<h3>{tr('Mode d’emploi')}</h3>",
-        f"<p><i>{tr('Version courte ; le mode d’emploi complet est le PDF livré avec l’outil.')}</i></p>",
+        f"<p><i>{tr('Version courte ; le mode d’emploi complet s’ouvre par le bouton MODE D’EMPLOI (PDF), en bas de cette fenêtre.')}</i></p>",
     ]
     for title, text in sections:
         html.append(f"<p><b>{title}</b><br>{text}</p>")
@@ -141,9 +153,29 @@ class AboutDialog(QDialog):
             browser.setHtml(html)
             tabs.addTab(browser, name)
 
+        self.manual_btn = QPushButton(tr("MODE D’EMPLOI (PDF)"))
+        set_icon(self.manual_btn, "manual")
+        self.manual_btn.clicked.connect(self._open_manual)
+        if manual_pdf_path() is None:
+            self.manual_btn.setEnabled(False)
+            self.manual_btn.setToolTip(tr("Mode d’emploi PDF absent de cette installation."))
         close_btn = QPushButton(tr("Fermer"))
         close_btn.clicked.connect(self.accept)
+        buttons = QHBoxLayout()
+        buttons.addWidget(self.manual_btn)
+        buttons.addStretch(1)
+        buttons.addWidget(close_btn)
         layout = QVBoxLayout(self)
         layout.addLayout(header)
         layout.addWidget(tabs, 1)
-        layout.addWidget(close_btn, 0, Qt.AlignmentFlag.AlignRight)
+        layout.addLayout(buttons)
+
+    def _open_manual(self) -> None:
+        """Ouvre le PDF dans le lecteur du système (Edge, Acrobat…)."""
+        path = manual_for_viewer()
+        if path is None or not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
+            QMessageBox.warning(
+                self,
+                APP_TITLE,
+                tr("Impossible d’ouvrir le mode d’emploi : aucun lecteur PDF n’est associé aux fichiers .pdf."),
+            )

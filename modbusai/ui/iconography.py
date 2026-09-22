@@ -71,6 +71,13 @@ def _export(painter: QPainter, pen: QPen) -> None:
     _poly(painter, (5, 17), (5, 20), (19, 20), (19, 17))
 
 
+def _manual(painter: QPainter, pen: QPen) -> None:
+    _poly(painter, (14, 3), (6, 3), (6, 21), (18, 21), (18, 7), (14, 3), (14, 7), (18, 7))
+    _line(painter, 9, 11, 15, 11)
+    _line(painter, 9, 14, 15, 14)
+    _line(painter, 9, 17, 13, 17)
+
+
 def _help(painter: QPainter, pen: QPen) -> None:
     painter.drawEllipse(QRectF(4, 4, 16, 16))
     font = painter.font()
@@ -169,6 +176,7 @@ _PAINTERS: dict[str, Painter] = {
     "refresh": _refresh,
     "export": _export,
     "help": _help,
+    "manual": _manual,
     "trash": _trash,
     "copy": _copy,
     "settings": _settings,

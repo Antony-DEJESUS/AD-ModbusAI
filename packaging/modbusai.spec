@@ -21,6 +21,19 @@ ROOT = Path(SPECPATH).parent
 _init = (ROOT / "modbusai" / "__init__.py").read_text(encoding="utf-8")
 VERSION = re.search(r'__version__ = "([^"]+)"', _init).group(1)
 
+# Mode d'emploi ouvert depuis À propos : le PDF de la version, sinon le plus
+# récent (même règle que modbusai.ui.resources.manual_pdf_path). Sans PDF,
+# on s'arrête : un exécutable dont le bouton ne mène à rien ne doit pas sortir.
+def _manual_key(path):
+    return tuple(int(n) for n in re.search(r"_v([\d.]+)\.pdf$", path.name).group(1).split("."))
+
+
+_manuals = sorted((ROOT / "docs").glob("AD-ModbusAI_Mode_d_emploi_v*.pdf"), key=_manual_key)
+if not _manuals:
+    raise SystemExit("Mode d'emploi PDF absent de docs/ : lancer docs/manuel/build_manuel.py")
+_exact = ROOT / "docs" / f"AD-ModbusAI_Mode_d_emploi_v{VERSION}.pdf"
+MANUAL = _exact if _exact.exists() else _manuals[-1]
+
 COMMON = dict(
     pathex=[str(ROOT)],
     binaries=[],
@@ -33,11 +46,12 @@ COMMON = dict(
 # ------------------------------------------------------- application fenêtrée
 app = Analysis(
     [str(ROOT / "main.py")],
-    # Logo, icône et historique lus à l'exécution via modbusai.ui.resources
+    # Logo, icône, historique et mode d'emploi lus à l'exécution via modbusai.ui.resources
     datas=[
         (str(ROOT / "assets" / "*.png"), "assets"),
         (str(ROOT / "assets" / "modbusai.ico"), "assets"),
         (str(ROOT / "CHANGELOG.md"), "."),
+        (str(MANUAL), "docs"),
     ],
     # pymodbus ne sert qu'aux tests (oracle) : inutile dans l'exécutable.
     excludes=["pymodbus", "pytest", "tkinter", "PySide6.QtNetwork", "PySide6.QtQml", "PySide6.QtQuick"],

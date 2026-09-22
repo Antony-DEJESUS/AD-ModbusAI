@@ -5,6 +5,18 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 1.2.0 - Mode d'emploi embarqué
+
+- **Mode d'emploi PDF dans l'exécutable** : le bouton MODE D'EMPLOI (PDF) de
+  la fenêtre À propos l'ouvre dans le lecteur PDF du système. Plus besoin de
+  garder le PDF à côté de l'exécutable sur le PC de chantier.
+- Sous PyInstaller, le PDF est recopié dans le dossier temporaire de
+  l'utilisateur avant ouverture : le lecteur reste ouvert après la fermeture
+  de l'application, dont le dossier d'extraction est effacé.
+- Le PDF retenu est celui de la version en cours, sinon le plus récent de
+  `docs/` : une version peut sortir avec le manuel de la précédente. La
+  construction s'arrête si aucun PDF n'est présent.
+
 ## 1.1.0 - Serveur MCP : le bus vu comme des outils
 
 - **Serveur MCP** (`python -m modbusai.mcp`, exécutable `AD-ModbusAI-MCP`) :

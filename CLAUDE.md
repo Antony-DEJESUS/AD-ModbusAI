@@ -66,7 +66,7 @@ modbusai/ui/                   couche 3 : Qt uniquement
     metrics.py                 largeurs et hauteurs tirées du texte, police à chiffres tabulaires
     widgets/labels.py          section() et muted() : étiquettes typées par la feuille de style
     widgets/stat_tiles.py      rangée de compteurs : valeur lisible, libellé discret, couleur si non nul
-    resources.py               logo, icône, CHANGELOG (compatible PyInstaller)
+    resources.py               logo, icône, CHANGELOG, mode d'emploi PDF (compatible PyInstaller)
     network_tools.py           ping système dans un thread, ouverture de ncpa.cpl (Windows)
     pages/                     master_page, sniffer_page, scan_page, diagnostic_page, slave_page
     widgets/                   connection_bar, request_bar, actions_panel, register_grid, exchange_panel,
