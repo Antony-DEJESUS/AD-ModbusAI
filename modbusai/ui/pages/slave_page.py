@@ -29,6 +29,8 @@ from modbusai.modbus.codec import Radix, format_int, parse_int
 from modbusai.modbus.slave import TABLE_SIZE, DataStore, HandledRequest, SlaveConfig, Table
 from modbusai.transport.netinfo import is_wildcard, local_ipv4_addresses
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
+from modbusai.ui import highlights
+from modbusai.ui.highlights import Highlight
 from modbusai.ui.iconography import set_icon
 from modbusai.ui.metrics import text_width, use_tabular_figures
 from modbusai.ui.palette import State, color
@@ -38,7 +40,6 @@ from modbusai.ui.widgets.log_console import SLAVE_COLUMNS, LogPanel
 from modbusai.ui.widgets.stat_tiles import StatTiles
 
 COLUMNS = 10
-FLASH_S = 2.0  # durée de l'éclairage vert d'une cellule lue ou écrite
 
 
 def listen_description(settings: LinkSettings) -> str:
@@ -85,12 +86,16 @@ class RegisterTableModel(QAbstractTableModel):
         self.fmt = CellFormat.DEC_SIGNED
         self._seen_version = -1
         self._touched: dict[tuple[Table, int], float] = {}  # (table, adresse) -> instant de fin d'animation
+        self._span = highlights.seconds(Highlight.SLAVE_ACCESS)
 
     # ------------------------------------------------------- animation
     def touch(self, table: Table, address: int, count: int) -> None:
         """Marque une zone lue ou écrite par un maître : elle s'éclaire en vert
         puis s'éteint progressivement (voir FLASH_S)."""
-        end = time.monotonic() + FLASH_S
+        if not highlights.enabled(Highlight.SLAVE_ACCESS):
+            return
+        self._span = highlights.seconds(Highlight.SLAVE_ACCESS)
+        end = time.monotonic() + self._span
         for addr in range(address, min(address + count, TABLE_SIZE)):
             self._touched[(table, addr)] = end
 
@@ -119,11 +124,9 @@ class RegisterTableModel(QAbstractTableModel):
         if end is None:
             return None
         remaining = end - time.monotonic()
-        if remaining <= 0:
+        if remaining <= 0 or self._span <= 0:
             return None
-        tint = QColor(color(State.OK))
-        tint.setAlphaF(min(1.0, 0.14 + 0.46 * (remaining / FLASH_S)))  # s'estompe en douceur
-        return tint
+        return highlights.tint(Highlight.SLAVE_ACCESS, remaining / self._span, peak=0.60, floor=0.14)
 
     # ------------------------------------------------------------- config
     def configure(self, table: Table, start: int, rows: int, fmt: CellFormat) -> None:

@@ -5,6 +5,25 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 1.4.0 - Les surlignages se règlent
+
+- **Configurateur des couleurs** : le bouton COULEURS, au-dessus de la grille
+  du maître, ouvre une fenêtre qui liste les surlignages. Pour chacun : actif
+  ou non, la couleur, et la durée de l'animation. Trois signaux pour l'instant,
+  la valeur qui change côté maître, la cellule lue ou écrite côté serveur
+  esclave, et la valeur périmée.
+- La charte AD reste la source des couleurs par défaut et le test de contraste
+  continue de la vérifier. Un choix de l'utilisateur ne fait que s'y
+  substituer, et « Rétablir la charte » revient à la référence. Aucune couleur
+  n'est écrite dans un widget, la règle du projet tient.
+- **La case « Masquer les lignes à zéro » quitte la colonne des formats** pour
+  une barre au-dessus du tableau. Coincée sous Inversion Octets et Non signé,
+  elle passait pour une option de décimales.
+- Correction : les tests sur bus virtuel ouvraient leurs liaisons avec le
+  silence inter-trames par défaut de 5 ms, alors que le guide du projet impose
+  20 ms dans ce cas. Les pauses du GIL coupaient les réponses en deux dès que
+  la machine était chargée, et la CI rougissait au hasard.
+
 ## 1.3.0 - L'onglet MAÎTRE dit quel registre bouge
 
 Retour de chantier : en lecture cyclique sur un équipement, on cherche quel

@@ -371,8 +371,29 @@ def s4_maitre() -> str:
         "porte sur la lecture précédente de la même requête ; changer d'esclave, d'adresse ou de longueur repart de "
         "zéro plutôt que de tout faire clignoter. Une ligne de 32 ou 64 bits s'éclaire dès que l'un de ses registres "
         "bouge.</p>"
-        + "<p><b>Masquer les zéros</b>, dans la colonne de gauche, n'affiche que les lignes portant une valeur : sur "
-        "une lecture de 125 registres, seuls ceux qui servent restent à l'écran.</p>"
+        + "<p>Au-dessus du tableau, <b>Masquer les lignes à zéro</b> n'affiche que les lignes portant une valeur : "
+        "sur une lecture de 125 registres, seuls ceux qui servent restent à l'écran. Le bouton <b>COULEURS</b>, à "
+        "droite de la même barre, ouvre le réglage des surlignages.</p>"
+        + "<h2>4.5 Couleurs des surlignages</h2>"
+        + "<p>Un surlignage désigne un fait, pas une couleur. Trois sont réglables : la valeur qui change dans "
+        "l'onglet MAÎTRE, la cellule lue ou écrite dans l'onglet SERVEUR ESCLAVE, et la valeur périmée. Pour chacun, "
+        "la fenêtre permet de le couper, de choisir sa teinte et, pour les deux animés, de régler la durée.</p>"
+        + table(
+            ["Réglage", "Ce qu'il fait"],
+            [
+                ["Actif", "Décoché, le surlignage ne s'affiche plus du tout. Ce qui était allumé s'éteint."],
+                ["Couleur", "Ouvre le sélecteur du système. Le bouton indique « Charte » tant que la couleur AD est en place, « Couleur » dès qu'elle est remplacée."],
+                ["Durée", "Temps pendant lequel la cellule reste éclairée, de 0,5 à 60 secondes. Une valeur périmée est un marquage permanent, elle n'a pas de durée."],
+                ["Rétablir la charte", "Rend les trois surlignages à leur état d'origine : actifs, aux couleurs AD, aux durées d'origine."],
+            ],
+        )
+        + note(
+            "astuce",
+            "Pourquoi on peut changer ces couleurs",
+            "Un écran de portable en plein soleil dans un local technique ne rend pas comme un écran de bureau, et "
+            "tout le monde ne distingue pas les mêmes teintes. Les couleurs AD restent la référence et reviennent "
+            "d'un clic ; le reste de l'application ne bouge pas.",
+        )
         + note(
             "attention",
             "Les lignes masquées sont toujours écrites",
@@ -380,7 +401,7 @@ def s4_maitre() -> str:
             "avec leurs zéros : c'est ce que demande le protocole, une écriture multiple porte sur une plage "
             "contiguë. Masquer une ligne ne la retire donc pas de ce qui part dans l'automate.",
         )
-        + "<h2>4.5 Dernier échange et journal</h2>"
+        + "<h2>4.6 Dernier échange et journal</h2>"
         + "<p>Le panneau de droite détaille le dernier échange : résultat, temps de réponse (fin d'émission → premier "
         "octet reçu), temps de transaction (début d'émission → dernier octet), trames émise et reçue en hexadécimal, "
         "nombre d'octets et de blocs reçus, message d'erreur.</p>"

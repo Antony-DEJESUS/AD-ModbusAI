@@ -19,13 +19,23 @@ from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from modbusai.modbus.codec import DisplayMode, DisplayOptions, format_bits, format_registers  # noqa: E402
+from modbusai.ui import highlights  # noqa: E402
+from modbusai.ui.highlights import Highlight  # noqa: E402
 from modbusai.ui.pages.master_page import _rows_covering, _zero_rows  # noqa: E402
-from modbusai.ui.widgets.register_grid import CHANGE_FLASH_S, RegisterGrid  # noqa: E402
+from modbusai.ui.widgets.register_grid import RegisterGrid  # noqa: E402
 
 
 @pytest.fixture(scope="module")
 def app():
     return QApplication.instance() or QApplication([])
+
+
+@pytest.fixture(autouse=True)
+def charte():
+    """Chaque test part des réglages d'origine : les surlignages sont persistés."""
+    highlights.reset_all()
+    yield
+    highlights.reset_all()
 
 
 @pytest.fixture
@@ -114,7 +124,7 @@ def test_a_flash_colours_the_whole_row_and_fades(grid):
     grid.flash({1})
     assert all(lit(grid, 1, col) for col in range(grid.columnCount()))  # toute la ligne
     assert not lit(grid, 0)  # ligne non concernée
-    assert grid._flash_until[1] - time.monotonic() > CHANGE_FLASH_S - 1
+    assert grid._flash_until[1] - time.monotonic() > highlights.seconds(Highlight.MASTER_CHANGE) - 1
 
 
 def test_a_flash_survives_the_next_read(grid):
@@ -131,3 +141,47 @@ def test_changing_the_request_clears_the_flashes(grid):
     grid.clear_flashes()
     assert not grid._flash_until
     assert not lit(grid, 0) and not lit(grid, 1)
+
+
+# --------------------------------------------------- surlignages configurables
+def test_a_disabled_highlight_never_lights_anything(grid):
+    highlights.set_enabled(Highlight.MASTER_CHANGE, False)
+    grid.show_rows(rows_16bits([1, 2]))
+    grid.flash({0, 1})
+    assert not grid._flash_until
+    assert not lit(grid, 0)
+
+
+def test_turning_a_highlight_off_clears_what_was_lit(grid):
+    grid.show_rows(rows_16bits([1, 2]))
+    grid.flash({0})
+    assert lit(grid, 0)
+    highlights.set_enabled(Highlight.MASTER_CHANGE, False)
+    grid.refresh_highlights()
+    assert not lit(grid, 0)
+
+
+def test_a_chosen_colour_replaces_the_charte_one(grid):
+    from PySide6.QtGui import QColor
+
+    assert not highlights.is_custom(Highlight.MASTER_CHANGE)
+    charte = highlights.base_color(Highlight.MASTER_CHANGE)
+    highlights.set_color(Highlight.MASTER_CHANGE, QColor(200, 30, 90))
+    assert highlights.is_custom(Highlight.MASTER_CHANGE)
+    assert highlights.base_color(Highlight.MASTER_CHANGE).name() == QColor(200, 30, 90).name()
+
+    grid.show_rows(rows_16bits([1]))
+    grid.flash({0})
+    shown = grid.item(0, 1).background().color()
+    assert (shown.red(), shown.green(), shown.blue()) == (200, 30, 90)
+
+    highlights.set_color(Highlight.MASTER_CHANGE, None)  # retour à la charte
+    assert not highlights.is_custom(Highlight.MASTER_CHANGE)
+    assert highlights.base_color(Highlight.MASTER_CHANGE).name() == charte.name()
+
+
+def test_the_duration_is_the_configured_one(grid):
+    highlights.set_seconds(Highlight.MASTER_CHANGE, 12.0)
+    grid.show_rows(rows_16bits([1]))
+    grid.flash({0})
+    assert grid._flash_until[0] - time.monotonic() > 11

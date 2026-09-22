@@ -24,10 +24,16 @@ def qapp():
     return QCoreApplication.instance() or QCoreApplication([])
 
 
+BUS_GAP_MS = 20
+"""Silence inter-trames sur le bus virtuel. Le plancher normal de 5 ms ne
+tient pas ici : les pauses du GIL entre threads Python coupent les réponses
+en deux dès que la machine est chargée (voir CLAUDE.md)."""
+
+
 class ThreadedSlave:
     """Serveur esclave dans un thread Python, même boucle que SlaveWorker.run."""
 
-    def __init__(self, port: str, config: SlaveConfig, store: DataStore | None = None, gap_ms: float | None = None):
+    def __init__(self, port: str, config: SlaveConfig, store: DataStore | None = None, gap_ms: float = BUS_GAP_MS):
         self.store = store or DataStore()
         self.handler = SlaveHandler(self.store, config)
         settings = SerialSettings(port, response_timeout_ms=200, inter_frame_delay_ms=gap_ms)
@@ -59,7 +65,7 @@ def test_master_reads_and_writes_slave_server(qapp):
     with VirtualBus(2) as bus, ThreadedSlave(bus.ports[1], cfg) as slave:
         slave.store.set(Table.HOLDING_REGISTERS, 0, [11, 22, 33])
         slave.store.set(Table.COILS, 0, [1, 1, 0, 1])
-        link = SerialLink(SerialSettings(bus.ports[0], response_timeout_ms=300))
+        link = SerialLink(SerialSettings(bus.ports[0], response_timeout_ms=300, inter_frame_delay_ms=BUS_GAP_MS))
         link.open()
         try:
             m = RtuMaster(link)
@@ -81,7 +87,7 @@ def test_master_reads_and_writes_slave_server(qapp):
 def test_fault_injection_seen_by_master(qapp):
     cfg = SlaveConfig(slave_ids={1}, response_delay_ms=60, corrupt_ratio=1.0)
     with VirtualBus(2) as bus, ThreadedSlave(bus.ports[1], cfg):
-        link = SerialLink(SerialSettings(bus.ports[0], response_timeout_ms=300))
+        link = SerialLink(SerialSettings(bus.ports[0], response_timeout_ms=300, inter_frame_delay_ms=BUS_GAP_MS))
         link.open()
         try:
             rec = RtuMaster(link).execute(Request(1, FunctionCode.READ_HOLDING_REGISTERS, 0, 1))
@@ -94,7 +100,8 @@ def test_fault_injection_seen_by_master(qapp):
 def test_sniffer_sees_master_slave_dialogue(qapp):
     with VirtualBus(3) as bus, ThreadedSlave(bus.ports[1], SlaveConfig(slave_ids={1})) as slave:
         slave.store.set(Table.HOLDING_REGISTERS, 0, [0x1234])
-        spy = SerialLink(SerialSettings(bus.ports[2], response_timeout_ms=300), allow_tx=False)
+        spy_link = SerialSettings(bus.ports[2], response_timeout_ms=300, inter_frame_delay_ms=BUS_GAP_MS)
+        spy = SerialLink(spy_link, allow_tx=False)
         spy.open()
         decoder = PassiveDecoder(300)
         stop = threading.Event()
@@ -106,7 +113,7 @@ def test_sniffer_sees_master_slave_dialogue(qapp):
 
         t = threading.Thread(target=listen, daemon=True)
         t.start()
-        link = SerialLink(SerialSettings(bus.ports[0], response_timeout_ms=300))
+        link = SerialLink(SerialSettings(bus.ports[0], response_timeout_ms=300, inter_frame_delay_ms=BUS_GAP_MS))
         link.open()
         try:
             m = RtuMaster(link)

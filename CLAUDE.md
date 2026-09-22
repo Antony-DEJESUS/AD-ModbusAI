@@ -59,6 +59,7 @@ modbusai/ui/                   couche 3 : Qt uniquement
     workers.py                 ModbusWorker (maître RTU/TCP), SnifferWorker, SlaveWorker, TcpSlaveWorker
     controllers.py             ScanController, CampaignController (durée), StressController (phases)
     palette.py                 charte AD : jetons de couleur des deux thèmes, couleurs d'état (State)
+    highlights.py              surlignages : fiche, activation, couleur et durée réglables (QSettings)
     theme.py                   palette Qt construite depuis la charte, application du thème
     style.py                   feuille de style engendrée depuis les jetons (cartes, onglets, accent)
     icons.py                   chevrons et coche de la feuille de style, dessinés à l'exécution
@@ -70,7 +71,8 @@ modbusai/ui/                   couche 3 : Qt uniquement
     network_tools.py           ping système dans un thread, ouverture de ncpa.cpl (Windows)
     pages/                     master_page, sniffer_page, scan_page, diagnostic_page, slave_page
     widgets/                   connection_bar, request_bar, actions_panel, register_grid, exchange_panel,
-                               log_console (colonnes fixes + en-tête), config_dialog, about_dialog
+                               log_console (colonnes fixes + en-tête), config_dialog, about_dialog,
+                               highlight_dialog (couleurs des surlignages)
 assets/                        marque mark-*.png (A + « AD »), icône .ico (A sur fond d'accent) ; source/ = artwork d'origine, non embarqué
 tools/make_logo.py             régénère marque et icône, --accent donne sa couleur à chaque outil de la gamme
 tools/release_notes.py         section du CHANGELOG d'une version, et contrôle tag <-> __version__
@@ -182,6 +184,14 @@ docs/manuel/                   captures.py (captures sur bus virtuel) et build_m
   (fond, surfaces, cartes, bordures, texte, accent, états). `ui/theme.py` en
   fait une `QPalette`, `ui/style.py` la feuille de style, `ui/icons.py` les
   indicateurs (chevrons, coche) que la feuille de style empêche Qt de dessiner.
+- **Surlignages** : `ui/highlights.py` est la seule porte par laquelle une
+  couleur peut venir de l'utilisateur. Chaque surlignage a une fiche (libellé,
+  explication, `State` par défaut, durée) ; l'activation, la teinte et la durée
+  vivent dans QSettings sous `highlights/<clé>/`. Une grille ne choisit jamais
+  sa couleur : elle appelle `tint()` ou `foreground()`, qui rendent `None` si le
+  surlignage est coupé. La charte reste la référence, `reset()` y revient, et le
+  test de contraste porte toujours sur elle. Ajouter un surlignage = une fiche
+  dans `catalogue()`, rien d'autre.
 - **Zone touchée** : `SlaveHandler` renseigne `HandledRequest.access` (table,
   adresse, nombre, lecture ou écriture) ; l'onglet Serveur esclave s'en sert
   pour éclairer en vert les cellules que le maître vient de lire ou d'écrire.

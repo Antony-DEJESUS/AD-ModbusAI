@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtWidgets import QSplitter, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QHBoxLayout, QPushButton, QSplitter, QVBoxLayout, QWidget
 
 from modbusai.i18n import tr
 from modbusai.modbus import codec
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus, Request
+from modbusai.ui.iconography import set_icon
 from modbusai.ui.style import PAGE_MARGINS
 from modbusai.ui.widgets.actions_panel import ActionsPanel
 from modbusai.ui.widgets.exchange_panel import ExchangePanel
+from modbusai.ui.widgets.highlight_dialog import HighlightDialog
 from modbusai.ui.widgets.log_console import LogPanel
 from modbusai.ui.widgets.register_grid import RegisterGrid
 from modbusai.ui.widgets.request_bar import RequestBar
@@ -44,9 +46,32 @@ class MasterPage(QWidget):
         self.log_panel = LogPanel()
         self.console = self.log_panel.console
 
+        # La case vivait dans la colonne des formats, où elle passait pour une
+        # option de décimales. Elle appartient au tableau : elle est au-dessus.
+        self.hide_zeros = QCheckBox(tr("Masquer les lignes à zéro"))
+        self.hide_zeros.setToolTip(
+            tr("Masque les lignes nulles. Elles restent envoyées à l'écriture, seul l'affichage est filtré.")
+        )
+        self.colors_btn = QPushButton(tr("COULEURS"))
+        self.colors_btn.setToolTip(tr("Activer, couper ou changer la couleur des surlignages de la grille."))
+        set_icon(self.colors_btn, "theme")
+
+        grid_bar = QHBoxLayout()
+        grid_bar.setContentsMargins(0, 0, 0, 0)
+        grid_bar.addWidget(self.hide_zeros)
+        grid_bar.addStretch(1)
+        grid_bar.addWidget(self.colors_btn)
+
+        grid_box = QWidget()
+        grid_layout = QVBoxLayout(grid_box)
+        grid_layout.setContentsMargins(0, 0, 0, 0)
+        grid_layout.setSpacing(4)
+        grid_layout.addLayout(grid_bar)
+        grid_layout.addWidget(self.grid)
+
         middle = QSplitter(Qt.Orientation.Horizontal)
         middle.addWidget(self.actions)
-        middle.addWidget(self.grid)
+        middle.addWidget(grid_box)
         middle.addWidget(self.exchange)
         middle.setStretchFactor(1, 2)
         middle.setStretchFactor(2, 1)
@@ -74,7 +99,8 @@ class MasterPage(QWidget):
         self.actions.write_requested.connect(self._write)
         self.actions.stop_cycle_requested.connect(self.stop_cycle)
         self.actions.display_changed.connect(self._refresh_grid)
-        self.actions.zero_filter_changed.connect(self.grid.set_hide_zeros)
+        self.hide_zeros.toggled.connect(self.grid.set_hide_zeros)
+        self.colors_btn.clicked.connect(self._configure_colors)
         self.actions.cyclic.toggled.connect(lambda checked: None if checked else self.stop_cycle())
         self.exchange.clear_requested.connect(self._clear)
         self.log_panel.copied.connect(
@@ -207,6 +233,18 @@ class MasterPage(QWidget):
         self.status_message.emit(tr("Status : {p0}").format(p0=message))
 
     # =============================================================== grille
+    def _configure_colors(self) -> None:
+        """Les changements s'appliquent tout de suite : on juge une couleur sur
+        la grille, pas dans un aperçu."""
+        dialog = HighlightDialog(self)
+        dialog.changed.connect(self._repaint_highlights)
+        dialog.exec()
+        self._repaint_highlights()
+
+    def _repaint_highlights(self) -> None:
+        self.grid.refresh_highlights()
+        self._refresh_grid()
+
     def _display_options(self) -> codec.DisplayOptions:
         return self.actions.display_options(self.request_bar.current_radix)
 

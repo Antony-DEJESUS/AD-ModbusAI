@@ -11,13 +11,10 @@ from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QTableWidget, QTab
 
 from modbusai.i18n import tr
 from modbusai.modbus.codec import DisplayRow
+from modbusai.ui import highlights
+from modbusai.ui.highlights import Highlight
 from modbusai.ui.metrics import text_width, use_tabular_figures
 from modbusai.ui.palette import State, color
-
-CHANGE_FLASH_S = 5.0
-"""Une valeur qui change s'éclaire assez longtemps pour survivre au temps qu'on
-met à regarder ailleurs : en lecture cyclique, c'est le seul signal qui dise
-quel registre bouge vraiment."""
 
 _FLASH_TICK_MS = 80
 
@@ -49,17 +46,31 @@ class RegisterGrid(QTableWidget):
         self.hide_zeros = False
         self._zeros: list[bool] = []  # une valeur nulle par ligne affichée
         self._flash_until: dict[int, float] = {}  # ligne -> instant de fin d'éclairage
+        self._span = highlights.seconds(Highlight.MASTER_CHANGE)
         self._flash_timer = QTimer(self)
         self._flash_timer.timeout.connect(self._tick_flashes)
 
     # ------------------------------------------------------------ animation
     def flash(self, rows: Iterable[int]) -> None:
-        """Éclaire en vert les lignes dont la valeur vient de changer."""
-        end = time.monotonic() + CHANGE_FLASH_S
+        """Éclaire les lignes dont la valeur vient de changer, si l'utilisateur
+        n'a pas coupé ce surlignage."""
+        if not highlights.enabled(Highlight.MASTER_CHANGE):
+            return
+        self._span = highlights.seconds(Highlight.MASTER_CHANGE)
+        end = time.monotonic() + self._span
         for row in rows:
             self._flash_until[row] = end
         if self._flash_until and not self._flash_timer.isActive():
             self._flash_timer.start(_FLASH_TICK_MS)
+        self._paint_flashes()
+
+    def refresh_highlights(self) -> None:
+        """Les réglages ont changé : reprendre la durée et repeindre. Un
+        surlignage coupé éteint ce qui restait allumé."""
+        self._span = highlights.seconds(Highlight.MASTER_CHANGE)
+        if not highlights.enabled(Highlight.MASTER_CHANGE):
+            self.clear_flashes()
+            return
         self._paint_flashes()
 
     def clear_flashes(self) -> None:
@@ -81,9 +92,8 @@ class RegisterGrid(QTableWidget):
         for row in range(self.rowCount()):
             end = self._flash_until.get(row)
             tint = None
-            if end is not None and end > now:
-                tint = QColor(color(State.OK))
-                tint.setAlphaF(0.12 + 0.48 * ((end - now) / CHANGE_FLASH_S))  # s'estompe en douceur
+            if end is not None and end > now and self._span > 0:
+                tint = highlights.tint(Highlight.MASTER_CHANGE, (end - now) / self._span)
             for col in range(self.columnCount()):
                 item = self.item(row, col)
                 if item is not None:
@@ -145,7 +155,8 @@ class RegisterGrid(QTableWidget):
             item = self.item(i, 1)
             if item is None:
                 continue
-            if stale:
-                item.setForeground(QColor(color(State.MUTED)))
+            faded = highlights.foreground(Highlight.MASTER_STALE) if stale else None
+            if faded is not None:
+                item.setForeground(faded)
             else:
                 item.setData(Qt.ItemDataRole.ForegroundRole, None)

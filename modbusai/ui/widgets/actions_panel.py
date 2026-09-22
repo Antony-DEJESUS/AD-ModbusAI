@@ -26,7 +26,6 @@ class ActionsPanel(QFrame):
     write_requested = Signal()
     stop_cycle_requested = Signal()
     display_changed = Signal()  # inversion, signe, mode d'affichage
-    zero_filter_changed = Signal(bool)  # masquer les valeurs à zéro : filtre d'affichage, pas de codec
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -57,10 +56,6 @@ class ActionsPanel(QFrame):
         self.byte_swap = QCheckBox(tr("Inversion Octets"))
         self.word_swap = QCheckBox(tr("Inversion Mots"))
         self.unsigned = QCheckBox(tr("Non signé"))
-        self.hide_zeros = QCheckBox(tr("Masquer les zéros"))
-        self.hide_zeros.setToolTip(
-            tr("Masque les lignes nulles. Elles restent envoyées à l'écriture, seul l'affichage est filtré.")
-        )
         self.display_mode = QComboBox()
         for m in DisplayMode:
             self.display_mode.addItem(tr(m.value), m)
@@ -81,7 +76,6 @@ class ActionsPanel(QFrame):
         layout.addWidget(self.byte_swap)
         layout.addWidget(self.word_swap)
         layout.addWidget(self.unsigned)
-        layout.addWidget(self.hide_zeros)
         layout.addSpacing(6)
         layout.addWidget(section(tr("Mode d'affichage")))
         layout.addWidget(self.display_mode)
@@ -92,7 +86,6 @@ class ActionsPanel(QFrame):
         self.write_btn.clicked.connect(self.write_requested)
         self.stop_cycle_btn.clicked.connect(self.stop_cycle_requested)
         self.cycle_btn.clicked.connect(self._ask_period)
-        self.hide_zeros.toggled.connect(self.zero_filter_changed.emit)
         for w in (self.byte_swap, self.word_swap, self.unsigned):
             w.toggled.connect(self._on_display_changed)
         self.display_mode.currentIndexChanged.connect(self._on_display_changed)
@@ -165,7 +158,6 @@ class ActionsPanel(QFrame):
                 self.byte_swap,
                 self.word_swap,
                 self.unsigned,
-                self.hide_zeros,
                 self.display_mode,
             )
         )
