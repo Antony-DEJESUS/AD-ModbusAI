@@ -93,3 +93,31 @@ def test_sequence_increments():
 def test_invalid_request_raises():
     with pytest.raises(ValueError):
         RtuMaster(FakeLink(None)).execute(Request(1, FunctionCode.READ_HOLDING_REGISTERS, 0, 200))
+
+
+class SilentLink(FakeLink):
+    """Aucune réponse, et note le délai d'attente demandé."""
+
+    def __init__(self):
+        super().__init__(None)
+        self.waited: list[float] = []
+
+    def receive(self, timeout_ms: float) -> RawFrame | None:
+        self.waited.append(timeout_ms)
+        return None
+
+
+def test_broadcast_write_succeeds_without_answer():
+    """Esclave 0 : le silence est la réussite, pas un timeout, et le maître
+    n'attend que le délai de retournement au lieu du timeout de la liaison."""
+    link = SilentLink()
+    rec = RtuMaster(link).execute(Request(0, FunctionCode.WRITE_SINGLE_REGISTER, 40, values=(777,)))
+    assert rec.status is ExchangeStatus.OK
+    assert rec.rx_frame is None and rec.response_time_ms is None
+    assert "Diffusion" in rec.error_message
+    assert link.waited == [100.0]
+
+
+def test_broadcast_read_is_refused():
+    with pytest.raises(ValueError, match="diffusion"):
+        RtuMaster(FakeLink(None)).execute(Request(0, FunctionCode.READ_HOLDING_REGISTERS, 0, 1))

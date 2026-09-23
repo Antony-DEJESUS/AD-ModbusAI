@@ -59,7 +59,7 @@ from modbusai.analysis.observations import (
 )
 from modbusai.analysis.report import build_report, suggested_filename
 from modbusai.analysis.session import SessionStore
-from modbusai.analysis.stress import StressPhase, StressReport, default_scenario
+from modbusai.analysis.stress import StressPhase, StressReport, default_scenario, responsive_slaves
 from modbusai.i18n import tr
 from modbusai.modbus.records import Request
 from modbusai.transport.records import LinkSettings
@@ -419,7 +419,7 @@ class DiagnosticPage(QWidget):
         if self._settings is None:
             self.status_message.emit(tr("Configurez la liaison avant le test de torture."))
             return
-        others = tuple(s for s in self.session.stats().keys() if s != self.slave.value())
+        others = responsive_slaves(self.session.stats(), self.slave.value())
         phases = default_scenario(self.target_request(), self._settings, float(self.stress_duration.value()), others)
         self.stress_requested.emit(phases)
 

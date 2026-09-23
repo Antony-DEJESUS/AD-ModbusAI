@@ -72,15 +72,18 @@ class TcpServer:
         self._sel.register(srv, selectors.EVENT_READ)
 
     def close(self) -> None:
+        # Marquer fermé AVANT de fermer les sockets : appelé depuis un autre fil,
+        # serve() voit sinon une socket morte alors que _listen est encore posé,
+        # et prend l'arrêt demandé pour une panne.
+        srv, self._listen = self._listen, None
         for sock in list(self._buffers):
             self._drop(sock)
-        if self._listen is not None:
+        if srv is not None:
             try:
-                self._sel.unregister(self._listen)
-                self._listen.close()
+                self._sel.unregister(srv)
+                srv.close()
             except (OSError, KeyError, ValueError):
                 pass
-            self._listen = None
 
     def serve(self, stop: threading.Event) -> None:
         """Boucle bloquante jusqu'à ``stop``."""

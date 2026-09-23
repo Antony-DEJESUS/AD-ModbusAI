@@ -20,6 +20,8 @@ WRITE_FUNCTIONS = (
 
 IDENTIFICATION_FUNCTIONS = (FunctionCode.REPORT_SLAVE_ID, FunctionCode.READ_DEVICE_ID)
 MEI_READ_DEVICE_ID = 0x0E
+BROADCAST_ID = 0
+"""Adresse de diffusion : tous les esclaves exécutent l'écriture, aucun ne répond."""
 
 MAX_READ_BITS = 2000
 MAX_READ_REGISTERS = 125
@@ -31,9 +33,11 @@ def validate_request(req: Request) -> None:
     """Lève ValueError si la requête est hors bornes protocole."""
     if not 0 <= req.slave_id <= 247:
         raise ValueError("N° esclave hors plage (0..247)")
+    fc = req.function
+    if req.slave_id == BROADCAST_ID and fc not in WRITE_FUNCTIONS:
+        raise ValueError("Esclave 0 = diffusion : réservée aux écritures, aucun esclave n'y répond")
     if not 0 <= req.address <= 0xFFFF:
         raise ValueError("Adresse hors plage (0..65535)")
-    fc = req.function
     if fc in READ_BITS:
         if not 1 <= req.count <= MAX_READ_BITS:
             raise ValueError(f"Longueur hors plage (1..{MAX_READ_BITS})")
@@ -41,14 +45,16 @@ def validate_request(req: Request) -> None:
         if not 1 <= req.count <= MAX_READ_REGISTERS:
             raise ValueError(f"Longueur hors plage (1..{MAX_READ_REGISTERS})")
     elif fc is FunctionCode.WRITE_SINGLE_COIL:
-        if len(req.values) != 1:
-            raise ValueError("FC05 : une seule valeur attendue")
+        if len(req.values) != 1 or req.values[0] not in (0, 1):
+            raise ValueError("FC05 : une seule valeur 0 ou 1 attendue")
     elif fc is FunctionCode.WRITE_SINGLE_REGISTER:
         if len(req.values) != 1 or not 0 <= req.values[0] <= 0xFFFF:
             raise ValueError("FC06 : une valeur 0..65535 attendue")
     elif fc is FunctionCode.WRITE_MULTIPLE_COILS:
         if not 1 <= len(req.values) <= MAX_WRITE_BITS:
             raise ValueError(f"FC15 : 1..{MAX_WRITE_BITS} valeurs attendues")
+        if any(v not in (0, 1) for v in req.values):
+            raise ValueError("FC15 : valeurs 0 ou 1 attendues")
     elif fc is FunctionCode.WRITE_MULTIPLE_REGISTERS:
         if not 1 <= len(req.values) <= MAX_WRITE_REGISTERS:
             raise ValueError(f"FC16 : 1..{MAX_WRITE_REGISTERS} valeurs attendues")

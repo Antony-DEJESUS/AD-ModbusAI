@@ -153,6 +153,10 @@ docs/manuel/                   captures.py (captures sur bus virtuel) et build_m
   RTS / DTR bas ; `read_loop()` fournit les trames en continu (SnifferWorker).
 - **Adresses** : protocole en base 0 partout dans le code. Seuls les libellés
   « 400001 » (barre de requête, en-têtes du serveur esclave) sont en base 1.
+- **Diffusion** : esclave 0 = écriture seule (FC05/06/15/16), `validate_request`
+  refuse une lecture. Le maître n'attend que `BROADCAST_TURNAROUND_MS` et rend
+  `OK` sans trame reçue (`response_time_ms` à `None`). Les listes d'esclaves à
+  interroger passent par `stress.responsive_slaves` (1..247, déjà répondu).
 - **Request pour FC43** : `address` = code de lecture (1 basique), `count` =
   identifiant d'objet de départ. FC17 n'a pas de paramètre.
 - **RTU ou TCP** : `LinkSettings = SerialSettings | TcpSettings`. `ModbusMaster`

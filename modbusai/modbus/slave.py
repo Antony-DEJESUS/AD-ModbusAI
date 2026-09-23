@@ -12,6 +12,7 @@ import random
 import threading
 from dataclasses import dataclass, field
 
+from modbusai import __version__
 from modbusai.modbus.crc import append_crc, check_crc
 from modbusai.modbus.records import FunctionCode
 
@@ -84,8 +85,8 @@ class SlaveConfig:
     read_only: bool = False  # refuse les écritures (exception 04 : défaut esclave)
     limits: dict[Table, int] = field(default_factory=lambda: {t: TABLE_SIZE for t in Table})
     vendor: str = "ModbusAI"
-    product: str = "Serveur esclave RTU"
-    revision: str = "0.3.0"
+    product: str = "Serveur esclave"  # sert en RTU comme en TCP
+    revision: str = __version__
 
 
 @dataclass(slots=True)

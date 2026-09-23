@@ -115,6 +115,10 @@ def test_parse_bad_response():
         Request(1, FC.READ_HOLDING_REGISTERS, 65535, 2),
         Request(1, FC.WRITE_SINGLE_REGISTER, 0, values=(70000,)),
         Request(1, FC.WRITE_MULTIPLE_REGISTERS, 0, values=()),
+        Request(1, FC.WRITE_SINGLE_COIL, 0, values=(2,)),  # une bobine vaut 0 ou 1
+        Request(1, FC.WRITE_MULTIPLE_COILS, 0, values=(1, 0, 5)),
+        Request(0, FC.READ_HOLDING_REGISTERS, 0, 1),  # personne ne répond à une diffusion
+        Request(0, FC.REPORT_SLAVE_ID, 0, 0),
     ],
 )
 def test_validate_rejects(req):
@@ -141,3 +145,9 @@ def test_identification_functions():
         parse_response(req17, append_crc(bytes.fromhex("0111054200")))
     with pytest.raises(ValueError):
         build_pdu(Request(1, FC.READ_DEVICE_ID, 5, 0))
+
+
+def test_broadcast_write_and_last_address_are_accepted():
+    assert build_adu(Request(0, FC.WRITE_SINGLE_REGISTER, 40, values=(777,)))[0] == 0
+    assert build_adu(Request(0, FC.WRITE_MULTIPLE_COILS, 0, values=(1, 0, True)))
+    assert build_adu(Request(1, FC.READ_HOLDING_REGISTERS, 65535, 1))

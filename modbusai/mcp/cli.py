@@ -68,7 +68,19 @@ def split_address(value: str, default_port: int = 8765) -> tuple[str, int]:
         raise SystemExit(f"Adresse d'écoute illisible : {value}") from exc
 
 
+def force_utf8_streams() -> None:
+    """Les tubes de Windows suivent la page de code du poste (cp1252), pas UTF-8 :
+    les accents partaient illisibles, ceux du client arrivaient déformés, et le
+    premier caractère hors cp1252 (le « Ω » d'une hypothèse) faisait tomber le
+    serveur. MCP parle UTF-8 : on l'impose, avec des fins de ligne « \\n »."""
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:  # absent si un appelant a remplacé le flux
+            reconfigure(encoding="utf-8", errors="replace", newline="\n")
+
+
 def main(argv: list[str] | None = None) -> int:
+    force_utf8_streams()
     args = build_parser().parse_args(argv)
     set_language(args.langue)
     service = ModbusService(allow_write=args.ecriture)

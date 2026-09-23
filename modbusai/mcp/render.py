@@ -91,15 +91,28 @@ def values_block(record: ExchangeRecord, *, mode: str = "registres", order: str 
         lines.append(f"{address:>9} {_base1(record, address):>8} {decimal:>21} {hexa:>8} {binary:>18}")
 
     multi = _MODES.get(mode)
-    if multi is not None and len(values) >= multi.words:
-        lines.append("")
-        lines.append(f"Interprétation en {multi.value}, dans les quatre ordres possibles :")
-        lines.append("Retenez celui qui donne une valeur plausible ; c'est l'ordre de l'équipement.")
-        for name, byte_swap, word_swap in _ORDERS:
-            opts = DisplayOptions(mode=multi, radix=Radix.DEC, signed=True, byte_swap=byte_swap, word_swap=word_swap)
-            texts = [r.text for r in format_registers(values, start, opts)]
-            mark = " <- ordre demandé" if name == order.upper() else ""
-            lines.append(f"  {name} : {'  '.join(texts)}{mark}")
+    if multi is None:
+        return "\n".join(lines)
+    whole = len(values) - len(values) % multi.words  # un registre isolé n'est pas une valeur du format
+    lines.append("")
+    if whole == 0:
+        lines.append(
+            f"Pas d'interprétation en {multi.value} : ce format occupe {multi.words} registres, "
+            f"{len(values)} lu(s). Relisez avec count={multi.words}."
+        )
+        return "\n".join(lines)
+    lines.append(f"Interprétation en {multi.value}, dans les quatre ordres possibles :")
+    lines.append("Retenez celui qui donne une valeur plausible ; c'est l'ordre de l'équipement.")
+    for name, byte_swap, word_swap in _ORDERS:
+        opts = DisplayOptions(mode=multi, radix=Radix.DEC, signed=True, byte_swap=byte_swap, word_swap=word_swap)
+        texts = [r.text for r in format_registers(values[:whole], start, opts)]
+        mark = " <- ordre demandé" if name == order.upper() else ""
+        lines.append(f"  {name} : {'  '.join(texts)}{mark}")
+    if whole < len(values):
+        lines.append(
+            f"{len(values) - whole} registre(s) en fin de lecture non interprété(s) : "
+            f"un {multi.value} occupe {multi.words} registres."
+        )
     return "\n".join(lines)
 
 

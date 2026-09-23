@@ -7,9 +7,10 @@ surchargés (timeout, vitesse, parité...) pour les tests de diagnostic.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 
-from modbusai.analysis.observations import SOURCE_TEST
+from modbusai.analysis.observations import SOURCE_TEST, Observation, SlaveStats, compute_stats
 from modbusai.i18n import tr
 from modbusai.modbus.records import FunctionCode, Request
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings
@@ -30,6 +31,18 @@ class CampaignSpec:
     inter_frame_delay_ms: float | None = None
     label: str = "Campagne"
     source: str = SOURCE_TEST  # SOURCE_DEGRADED pour une phase qui provoque volontairement des défauts
+    rotation: tuple[int, ...] = ()  # autres esclaves interrogés à tour de rôle avec celui de la requête
+
+    @property
+    def slaves(self) -> tuple[int, ...]:
+        return (self.request.slave_id, *(s for s in self.rotation if s != self.request.slave_id))
+
+    def request_at(self, step: int) -> Request:
+        """Requête du pas ``step`` : la même, ou l'esclave suivant de la rotation."""
+        slaves = self.slaves
+        if len(slaves) == 1:
+            return self.request
+        return replace(self.request, slave_id=slaves[step % len(slaves)])
 
     @property
     def changes_link(self) -> bool:
@@ -70,7 +83,9 @@ class CampaignSpec:
     def describe(self) -> str:
         parts = [
             f"{self.label}",
-            f"esclave {self.request.slave_id}",
+            f"esclave {self.request.slave_id}"
+            if len(self.slaves) == 1
+            else tr("esclaves {p0}").format(p0=", ".join(str(s) for s in self.slaves)),
             f"FC{int(self.request.function):02d} @{self.request.address} x{self.request.count}",
         ]
         parts.append(tr("période {p0} ms").format(p0=self.period_ms))
@@ -95,3 +110,13 @@ def probe_request(
     slave_id: int, function: FunctionCode = FunctionCode.READ_HOLDING_REGISTERS, address: int = 0, count: int = 1
 ) -> Request:
     return Request(slave_id, function, address, count)
+
+
+def campaign_stats(spec: CampaignSpec, observations: Iterable[Observation]) -> SlaveStats:
+    """Bilan d'une campagne. Avec une rotation, les esclaves interrogés sont
+    comptés ensemble : c'est le bus qui est jugé, pas un équipement."""
+    slave_id = spec.request.slave_id
+    obs = list(observations)
+    if len(spec.slaves) > 1:
+        obs = [replace(o, slave_id=slave_id) for o in obs]
+    return compute_stats(obs).get(slave_id) or SlaveStats(slave_id)

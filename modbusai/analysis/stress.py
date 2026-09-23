@@ -20,6 +20,22 @@ _READ_FCS = (
 )
 
 
+MIN_PHASE_S = 10.0
+"""Durée plancher d'une phase : en deçà, trop peu de lectures pour comparer."""
+
+
+def responsive_slaves(stats: dict[int, SlaveStats], exclude: int) -> tuple[int, ...]:
+    """Esclaves à alterner : ceux qui ont déjà répondu. Un absent ne ferait que
+    des timeouts, qu'on prendrait à tort pour une faiblesse du bus ; l'adresse 0
+    (diffusion) ne se lit pas."""
+    return tuple(sorted(s for s, st in stats.items() if s != exclude and 1 <= s <= 247 and st.answered > 0))
+
+
+def scenario_duration_s(phases: list[StressPhase]) -> float:
+    """Durée réelle du scénario, plancher par phase compris."""
+    return sum(p.spec.duration_s or 0.0 for p in phases)
+
+
 @dataclass(frozen=True, slots=True)
 class StressPhase:
     key: str
@@ -100,7 +116,7 @@ def default_scenario(
                 tr(
                     "Interroge tour à tour tous les esclaves connus : un bus qui souffre quand plusieurs répondent signe un conflit ou une polarisation faible."
                 ),
-                CampaignSpec(req, period_ms=100, label=tr("Alternance")),
+                CampaignSpec(req, period_ms=100, label=tr("Alternance"), rotation=other_slaves),
             )
         )
     if isinstance(settings, SerialSettings) and settings.baudrate > 9600:
@@ -114,7 +130,7 @@ def default_scenario(
                 CampaignSpec(req, period_ms=200, baudrate=9600, label=tr("9600 bauds"), source=SOURCE_DEGRADED),
             )
         )
-    share = max(10.0, total_duration_s / len(phases))
+    share = max(MIN_PHASE_S, total_duration_s / len(phases))
     return [replace(p, spec=replace(p.spec, duration_s=share, max_count=None)) for p in phases]
 
 

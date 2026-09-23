@@ -5,6 +5,50 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 1.4.1 - Test complet : corrections
+
+Passage en revue de toutes les fonctions sur le simulateur Modbus TCP, par le
+serveur MCP et par la fenêtre hors écran.
+
+- **Le serveur MCP tombait sous Windows** dès qu'une hypothèse citait la
+  résistance « 120 Ω » : les tubes suivaient la page de code du poste (cp1252),
+  qui n'a pas ce caractère. Les accents partaient aussi illisibles, et ceux
+  envoyés par l'assistant arrivaient déformés. Les trois flux sont désormais
+  en UTF-8.
+- **Diffusion (esclave 0)** : une écriture en diffusion était déclarée TIMEOUT
+  après une seconde d'attente, et laissait un faux « esclave 0 absent » dans
+  les statistiques. Elle est maintenant réussie sans réponse, après une pause
+  de retournement de 100 ms. Une lecture en diffusion, à laquelle personne ne
+  peut répondre, est refusée d'emblée.
+- **Test de torture, phase « Alternance d'esclaves »** : elle n'interrogeait
+  que l'esclave de base. Elle fait maintenant réellement tourner les esclaves
+  connus, et seulement ceux qui ont déjà répondu (un absent ne ferait que des
+  timeouts, pris à tort pour une faiblesse du bus). Le bilan de la phase porte
+  sur l'ensemble.
+- **Durée de la torture** : chaque phase dure au moins 10 s, mais l'outil
+  annonçait la durée demandée. Il annonce maintenant la durée réelle et le
+  plancher.
+- **L'écoute passive du serveur MCP** réclamait une liaison maître, même sur
+  son propre port. Elle n'en a plus besoin, comme dans la fenêtre.
+- **Saisies refusées au lieu d'être corrigées en silence** : une bobine écrite
+  avec la valeur 2 partait à 1. Le simulateur acceptait des adresses hors
+  1..247, des proportions de défauts au-delà de 100 % et des délais négatifs.
+  Il rappelle aussi, au démarrage, les défauts qu'on lui a demandé d'injecter.
+- **Formats sur plusieurs registres** : un registre en trop était collé à la
+  valeur (« 3.14  -1 ») ; il est maintenant signalé comme non interprété. Un
+  format qui manque de registres le dit, au lieu de ne rien afficher.
+- En Modbus TCP, l'hypothèse « Qualité de ligne » précise que la ligne en cause
+  est le bus RS-485 derrière la passerelle.
+- L'identification du simulateur annonçait « Serveur esclave RTU / 0.3.0 »,
+  y compris en TCP : elle donne désormais la version réelle.
+- Les campagnes du serveur MCP prenaient du retard sous Windows (86 lectures au
+  lieu de 100 à 50 ms) : elles sont maintenant calées sur une échéance absolue.
+- Le serveur TCP pouvait prendre son propre arrêt pour une panne quand il était
+  fermé depuis un autre fil.
+- Tests : réglages Qt isolés dans un dossier temporaire (sept tests échouaient
+  sous Windows, où QSettings n'écrit rien sans nom d'application), et nouveaux
+  tests MCP et fenêtre en Modbus TCP, qui tournent aussi sous Windows.
+
 ## 1.4.0 - Les surlignages se règlent
 
 - **Configurateur des couleurs** : le bouton COULEURS, au-dessus de la grille

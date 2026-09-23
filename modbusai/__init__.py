@@ -7,7 +7,7 @@ Y = nouvelle fonction, Z = correction. Le numéro est affiché dans la barre de
 titre et embarqué dans l'exécutable (voir packaging/modbusai.spec).
 """
 
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 APP_NAME = "AD - ModbusAI"
 APP_TITLE = f"{APP_NAME} v{__version__}"
 # Identifiant des réglages QSettings : figé, il ne suit pas le nom affiché

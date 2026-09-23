@@ -214,9 +214,14 @@ class MasterPage(QWidget):
                 self._last_start = rec.request.address
                 self._last_is_bits = rec.request.function in (1, 2)
                 self._refresh_grid(changed)
-            self.status_message.emit(
-                tr("Status : {p0}  -  {p1:.1f} ms").format(p0=rec.status.name, p1=rec.response_time_ms)
-            )
+            if rec.response_time_ms is None:  # diffusion : pas de réponse, donc pas de temps
+                self.status_message.emit(
+                    tr("Status : {p0}  -  {p1}").format(p0=rec.status.name, p1=rec.error_message or "")
+                )
+            else:
+                self.status_message.emit(
+                    tr("Status : {p0}  -  {p1:.1f} ms").format(p0=rec.status.name, p1=rec.response_time_ms)
+                )
         else:
             self.grid.mark_stale(True)
             self.status_message.emit(

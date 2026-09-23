@@ -17,7 +17,7 @@ from modbusai.analysis.observations import SOURCE_DEGRADED, SOURCE_TEST, Observa
 from modbusai.i18n import tr
 from modbusai.modbus.exceptions import exception_label
 from modbusai.modbus.records import Request
-from modbusai.transport.records import LinkSettings, Parity, SerialSettings
+from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
 
 MIN_SAMPLES = 5  # en dessous, on ne conclut pas
 
@@ -365,6 +365,13 @@ def _rule_line_quality(st: SlaveStats, settings: LinkSettings | None) -> Hypothe
     if st.rt_jitter is not None and st.rt_avg:
         ev.append(
             tr("temps de réponse {p0:.1f} ms en moyenne, gigue {p1:.1f} ms").format(p0=st.rt_avg, p1=st.rt_jitter)
+        )
+    if isinstance(settings, TcpSettings):
+        # Pas de ligne sur une liaison TCP : si ligne il y a, c'est le bus RS-485 d'une passerelle
+        ev.append(
+            tr(
+                "liaison Modbus TCP : la ligne en cause est le bus RS-485 derrière la passerelle, s'il y en a une ; sinon, voir le réseau (câble, commutateur, Wi-Fi)"
+            )
         )
     tests = [
         SuggestedTest(

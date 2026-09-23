@@ -10,9 +10,9 @@ from dataclasses import replace
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from modbusai.analysis.campaign import CampaignSpec
+from modbusai.analysis.campaign import CampaignSpec, campaign_stats
 from modbusai.analysis.identification import decode_device_id, decode_report_slave_id
-from modbusai.analysis.observations import Observation, SlaveStats, compute_stats
+from modbusai.analysis.observations import Observation, SlaveStats
 from modbusai.analysis.scanner import ScanPlan, ScanResult, ScanStatus, identification_requests, merge_attempts
 from modbusai.analysis.session import SessionStore
 from modbusai.analysis.stress import PhaseResult, StressPhase, evaluate
@@ -298,17 +298,17 @@ class CampaignController(QObject):
 
     def _send(self) -> None:
         if self._active and self._spec is not None:
-            self.execute_requested.emit(ExecuteJob(self._spec.request, self._spec.timeout_ms, self.TAG))
+            request = self._spec.request_at(len(self._records))
+            self.execute_requested.emit(ExecuteJob(request, self._spec.timeout_ms, self.TAG))
 
     def _finish(self) -> None:
         self._tick.stop()
         self._timer.stop()
         result: SlaveStats | None = None
         if self._records and self._spec is not None:
-            slave_id = self._spec.request.slave_id
-            result = compute_stats(
-                Observation.from_record(r, self._spec.source, self._spec.label) for r in self._records
-            ).get(slave_id, SlaveStats(slave_id))
+            result = campaign_stats(
+                self._spec, (Observation.from_record(r, self._spec.source, self._spec.label) for r in self._records)
+            )
         if self._spec is not None and self._spec.changes_link and self._base_settings is not None:
             self._restoring = True
             self.reopen_requested.emit(self._base_settings)

@@ -65,6 +65,10 @@ def main() -> None:
     parser.add_argument("version", nargs="?", help="version à extraire ; par défaut celle du paquet")
     parser.add_argument("--check", metavar="TAG", help="vérifie que le tag correspond à __version__")
     args = parser.parse_args()
+    # Redirigée sous Windows (runner de publication), la sortie suivrait la page
+    # de code cp1252 et tomberait sur le premier caractère absent (« Ω »)
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8")
     if args.check:
         check(args.check)
         return

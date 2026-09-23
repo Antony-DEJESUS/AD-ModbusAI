@@ -1,5 +1,6 @@
 import random
 
+from modbusai import __version__
 from modbusai.modbus.crc import append_crc, check_crc
 from modbusai.modbus.pdu import build_adu, parse_response
 from modbusai.modbus.records import FunctionCode as FC
@@ -98,7 +99,7 @@ def test_identification():
 
     body = roundtrip(h, Request(1, FC.READ_DEVICE_ID, 1, 0))
     ident = decode_device_id(bytes(body))
-    assert ident.vendor == "ModbusAI" and ident.revision == "0.3.0"
+    assert ident.vendor == "ModbusAI" and ident.revision == __version__
     rid = roundtrip(h, Request(1, FC.REPORT_SLAVE_ID, 0))
     assert "en marche" in decode_report_slave_id(bytes(rid))
 

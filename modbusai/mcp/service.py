@@ -18,7 +18,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from modbusai.analysis.campaign import CampaignSpec
+from modbusai.analysis.campaign import CampaignSpec, campaign_stats
 from modbusai.analysis.diagnostic import CampaignComparison, Hypothesis, SuggestedTest, analyse
 from modbusai.analysis.identification import DeviceIdentity, decode_device_id, decode_report_slave_id
 from modbusai.analysis.observations import (
@@ -26,7 +26,6 @@ from modbusai.analysis.observations import (
     SOURCE_MASTER,
     SOURCE_SCAN,
     SlaveStats,
-    compute_stats,
 )
 from modbusai.analysis.scanner import (
     ScanPlan,
@@ -338,7 +337,8 @@ class ModbusService:
         """Lance ``run`` dans un fil ; la liaison du maître lui est réservée."""
         with self._lock:
             self._refuse_if_busy()
-            self._require_master()
+            if job.kind != "sniff":  # l'écoute a sa propre liaison, sans droit d'émettre
+                self._require_master()
             self._busy = job.label
             self._job = job
 
@@ -448,17 +448,19 @@ class ModbusService:
         started = time.perf_counter()
         count = 0
         period = max(0.0, spec.period_ms / 1000)
+        next_tick = started
         while not job.stop.is_set() and not spec.is_done(count, time.perf_counter() - started):
-            tick = time.perf_counter()
-            record = self._require_master().execute(spec.request, spec.timeout_ms)
+            record = self._require_master().execute(spec.request_at(count), spec.timeout_ms)
             observations.append(self.session.add_record(record, source=spec.source, label=spec.label))
             count += 1
             job.done = count
-            remaining = period - (time.perf_counter() - tick)
+            # Échéance absolue : sous Windows chaque attente est arrondie au pas de
+            # l'horloge (~15 ms) ; mesurée d'un pas à l'autre, l'erreur s'accumulait.
+            next_tick = max(next_tick + period, time.perf_counter() - period)
+            remaining = next_tick - time.perf_counter()
             if remaining > 0:
                 job.stop.wait(remaining)
-        stats = compute_stats(observations)
-        return stats.get(spec.request.slave_id) or SlaveStats(spec.request.slave_id)
+        return campaign_stats(spec, observations)
 
     def run_stress(self, phases: Sequence[StressPhase], job: Job) -> StressReport:
         """Enchaîne les phases du scénario ; chacune est une campagne."""

@@ -20,7 +20,7 @@ from modbusai.analysis.diagnostic import CATALOGUE, SCORE_EXPLANATION, CampaignC
 from modbusai.analysis.observations import DEFAULT_SOURCES, SOURCE_TEST
 from modbusai.analysis.report import build_report
 from modbusai.analysis.scanner import ScanPlan
-from modbusai.analysis.stress import default_scenario
+from modbusai.analysis.stress import MIN_PHASE_S, default_scenario, responsive_slaves, scenario_duration_s
 from modbusai.mcp import render
 from modbusai.mcp.protocol import Tool, ToolError, obj
 from modbusai.mcp.service import MAX_SNIFF_S, Job, ModbusService
@@ -97,6 +97,13 @@ def _bool(args: dict[str, Any], name: str, default: bool = False) -> bool:
     return bool(raw)
 
 
+def _ratio(args: dict[str, Any], name: str) -> float:
+    value = _float(args, name, 0.0) or 0.0
+    if not 0.0 <= value <= 1.0:
+        raise ToolError(f"Argument « {name} » : proportion entre 0 et 1 (0.3 = 30 %), reçu {value:g}.")
+    return value
+
+
 def _choice(args: dict[str, Any], name: str, allowed: tuple[str, ...], default: str) -> str:
     raw = str(args.get(name, default))
     if raw not in allowed:
@@ -167,8 +174,11 @@ LINK_PROPERTIES: dict[str, Any] = {
 def _request(args: dict[str, Any], default_count: int = 1) -> Request:
     kind = _choice(args, "type", tuple(READ_FUNCTIONS), "holding")
     limit = 2000 if kind in ("coil", "discrete_input") else 125
+    slave = _int(args, "slave", None, 0, 247)
+    if slave == 0:  # vérifié ici : une campagne ne le découvrirait qu'une fois lancée
+        raise ToolError("Esclave 0 = diffusion : réservée aux écritures, aucun esclave n'y répond. Donnez 1 à 247.")
     return Request(
-        slave_id=_int(args, "slave", None, 0, 247),
+        slave_id=slave,
         function=READ_FUNCTIONS[kind],
         address=_int(args, "address", 0, 0, 65535),
         count=_int(args, "count", default_count, 1, limit),
@@ -310,8 +320,8 @@ def _write(service: ModbusService) -> Tool:
         kind = _choice(args, "type", ("coil", "holding"), "holding")
         values = _values(args)
         if kind == "coil":
+            # 0 ou 1 seulement : un « 2 » est une faute de frappe, pas un ordre de marche
             function = FunctionCode.WRITE_SINGLE_COIL if len(values) == 1 else FunctionCode.WRITE_MULTIPLE_COILS
-            values = tuple(1 if v else 0 for v in values)
         else:
             function = FunctionCode.WRITE_SINGLE_REGISTER if len(values) == 1 else FunctionCode.WRITE_MULTIPLE_REGISTERS
         request = Request(
@@ -392,7 +402,7 @@ def _scan(service: ModbusService) -> Tool:
         settings = service.settings
         if settings is None:
             raise ToolError("Liaison fermée : appelez d'abord l'outil « connect ».")
-        first = _int(args, "first", 1, 0, 247)
+        first = _int(args, "first", 1, 1, 247)
         last = _int(args, "last", 32, 0, 247)
         if last < first:
             raise ToolError("« last » doit être supérieur ou égal à « first ».")
@@ -543,7 +553,7 @@ def _stress(service: ModbusService) -> Tool:
         if settings is None:
             raise ToolError("Liaison fermée : appelez d'abord l'outil « connect ».")
         request = _request(args)
-        seen = tuple(s for s in service.stats() if s != request.slave_id)
+        seen = responsive_slaves(service.stats(), request.slave_id)
         duration = _float(args, "duration_s", 300.0) or 300.0
         phases = default_scenario(request, settings, duration, seen)
         job = Job("stress", "Test de torture", expected=len(phases))
@@ -558,12 +568,14 @@ def _stress(service: ModbusService) -> Tool:
 
         service.start_job(job, work)
         names = ", ".join(p.title for p in phases)
-        return _finish(job, _wait(args, 10.0), f"{len(phases)} phases sur {duration:.0f} s : {names}.")
+        real = scenario_duration_s(phases)
+        floor = f" (plancher de {MIN_PHASE_S:.0f} s par phase)" if real > duration + 0.5 else ""
+        return _finish(job, _wait(args, 10.0), f"{len(phases)} phases sur {real:.0f} s{floor} : {names}.")
 
     schema = obj(
         {
             **REQUEST_PROPERTIES,
-            "duration_s": {"type": "number", "default": 300, "description": "Durée totale, répartie à parts égales entre les phases."},
+            "duration_s": {"type": "number", "default": 300, "description": "Durée totale, répartie à parts égales entre les phases (10 s minimum par phase)."},
             "wait_s": {"type": "number", "default": 10},
         },
         required=("slave",),
@@ -789,20 +801,39 @@ def _slave_start(service: ModbusService) -> Tool:
         ids = args.get("slaves") or [1]
         if isinstance(ids, int):
             ids = [ids]
+        slave_ids = set(_values({"slaves": ids}, "slaves"))
+        if not all(1 <= i <= 247 for i in slave_ids):
+            raise ToolError("Argument « slaves » : adresses 1 à 247 (0 est la diffusion, que tout esclave écoute déjà).")
+        delay = _float(args, "response_delay_ms", 0.0) or 0.0
+        if not 0.0 <= delay <= 10_000.0:
+            raise ToolError("Argument « response_delay_ms » : entre 0 et 10000 ms.")
         config = SlaveConfig(
-            slave_ids={int(i) for i in ids},
-            response_delay_ms=_float(args, "response_delay_ms", 0.0) or 0.0,
-            drop_ratio=_float(args, "drop_ratio", 0.0) or 0.0,
-            corrupt_ratio=_float(args, "corrupt_ratio", 0.0) or 0.0,
+            slave_ids=slave_ids,
+            response_delay_ms=delay,
+            drop_ratio=_ratio(args, "drop_ratio"),
+            corrupt_ratio=_ratio(args, "corrupt_ratio"),
             read_only=_bool(args, "read_only"),
         )
         server = service.slave_start(link_settings(args), config)
         served = ", ".join(str(i) for i in sorted(config.slave_ids))
-        return (
-            f"Serveur esclave démarré sur {_listen_line(server)}.\n"
-            f"Adresses servies : {served}. Les tables sont à zéro ; « slave_set » les remplit.\n"
-            "Il tourne en parallèle du maître, à condition d'utiliser un autre port."
-        )
+        lines = [
+            f"Serveur esclave démarré sur {_listen_line(server)}.",
+            f"Adresses servies : {served}. Les tables sont à zéro ; « slave_set » les remplit.",
+            "Il tourne en parallèle du maître, à condition d'utiliser un autre port.",
+        ]
+        # Rappeler les défauts voulus : un simulateur oublié en mode dégradé ressemble à une panne
+        faults = []
+        if config.drop_ratio:
+            faults.append(f"{config.drop_ratio:.0%} des requêtes sans réponse")
+        if config.corrupt_ratio:
+            faults.append(f"{config.corrupt_ratio:.0%} des réponses corrompues")
+        if config.response_delay_ms:
+            faults.append(f"réponse retardée de {config.response_delay_ms:g} ms")
+        if config.read_only:
+            faults.append("écritures refusées (exception 04)")
+        if faults:
+            lines.append("Défauts injectés : " + ", ".join(faults) + ".")
+        return "\n".join(lines)
 
     schema = obj(
         {

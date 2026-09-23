@@ -1,11 +1,19 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from modbusai.analysis.campaign import CampaignSpec
+from modbusai.analysis.campaign import CampaignSpec, campaign_stats
 from modbusai.analysis.diagnostic import SuggestedTest, analyse
 from modbusai.analysis.observations import DEFAULT_SOURCES, Observation, compute_stats
 from modbusai.analysis.report import build_report, suggested_filename
-from modbusai.analysis.stress import PhaseResult, default_scenario, evaluate, phase_reading
+from modbusai.analysis.stress import (
+    MIN_PHASE_S,
+    PhaseResult,
+    default_scenario,
+    evaluate,
+    phase_reading,
+    responsive_slaves,
+    scenario_duration_s,
+)
 from modbusai.modbus.records import ExchangeStatus, FunctionCode, Request
 from modbusai.transport.records import Parity, SerialSettings, TcpSettings
 
@@ -163,3 +171,40 @@ def test_long_frames_refused_are_explained():
     ref = phase_result(phases, "ref", obs(ExchangeStatus.OK, 22.0, n=50))
     longp = phase_result(phases, "long", obs(ExchangeStatus.MODBUS_EXCEPTION, 12.5, n=218))
     assert "limite de sa table" in phase_reading(longp, ref)
+
+
+def test_alternation_phase_really_rotates_the_slaves():
+    """La phase « Alternance » interrogeait seulement l'esclave de base : elle
+    ne testait pas ce qu'elle annonçait."""
+    req = Request(1, FunctionCode.READ_HOLDING_REGISTERS, 0, 1)
+    phases = default_scenario(req, TcpSettings("127.0.0.1"), 60.0, other_slaves=(2, 5))
+    multi = next(p for p in phases if p.key == "multi")
+    assert [multi.spec.request_at(i).slave_id for i in range(6)] == [1, 2, 5, 1, 2, 5]
+    assert "esclaves 1, 2, 5" in multi.spec.describe()
+    # les autres phases gardent un seul esclave
+    ref = next(p for p in phases if p.key == "ref")
+    assert {ref.spec.request_at(i).slave_id for i in range(4)} == {1}
+
+
+def test_alternation_is_judged_on_the_whole_bus():
+    spec = CampaignSpec(Request(1, FunctionCode.READ_HOLDING_REGISTERS, 0, 1), rotation=(2,))
+    observations = obs(ExchangeStatus.OK, 5.0, n=3, slave=1) + obs(ExchangeStatus.TIMEOUT, n=3, slave=2)
+    st = campaign_stats(spec, observations)
+    assert st.slave_id == 1 and st.total == 6 and st.timeout == 3
+
+
+def test_only_slaves_that_answered_are_alternated():
+    observations = (
+        obs(ExchangeStatus.OK, 5.0, slave=1)
+        + obs(ExchangeStatus.OK, 5.0, slave=2)
+        + obs(ExchangeStatus.TIMEOUT, slave=9)  # absent : ne ferait que des timeouts
+        + obs(ExchangeStatus.OK, slave=0)  # diffusion : ne se lit pas
+    )
+    assert responsive_slaves(compute_stats(observations), exclude=1) == (2,)
+
+
+def test_scenario_duration_tells_the_real_total():
+    req = Request(1, FunctionCode.READ_HOLDING_REGISTERS, 0, 1)
+    phases = default_scenario(req, TcpSettings("127.0.0.1"), 12.0, other_slaves=(2,))
+    assert scenario_duration_s(phases) == len(phases) * MIN_PHASE_S
+    assert scenario_duration_s(default_scenario(req, TcpSettings("127.0.0.1"), 500.0)) == 500.0

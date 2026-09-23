@@ -13,9 +13,13 @@ from typing import Protocol
 
 from modbusai.modbus.exceptions import BadResponse, CrcError, ModbusException
 from modbusai.modbus.mbap import build_mbap, parse_mbap
-from modbusai.modbus.pdu import build_adu, build_pdu, parse_response, parse_response_pdu
+from modbusai.modbus.pdu import BROADCAST_ID, build_adu, build_pdu, parse_response, parse_response_pdu
 from modbusai.modbus.records import ExchangeRecord, ExchangeStatus, Request
 from modbusai.transport.records import Direction, LinkSettings, RawFrame, TcpSettings, TransportError
+
+BROADCAST_TURNAROUND_MS = 100.0
+"""Pause après une diffusion : les esclaves exécutent l'écriture sans répondre,
+le maître leur laisse ce délai avant la requête suivante (norme : 100 à 200 ms)."""
 
 
 class Link(Protocol):
@@ -94,12 +98,18 @@ class ModbusMaster:
             tx = RawFrame(Direction.TX, adu, now, now, timestamp)
             return record(ExchangeStatus.TRANSPORT_ERROR, None, None, error_message=str(exc))
 
+        broadcast = req.slave_id == BROADCAST_ID
         timeout = settings.response_timeout_ms if timeout_ms is None else timeout_ms
+        if broadcast:
+            timeout = min(timeout, BROADCAST_TURNAROUND_MS)
         try:
             rx = self.link.receive(timeout)
         except TransportError as exc:
             return record(ExchangeStatus.TRANSPORT_ERROR, None, None, error_message=str(exc))
 
+        if rx is None and broadcast:
+            # Silence attendu : c'est la réussite d'une diffusion, pas un timeout
+            return record(ExchangeStatus.OK, None, None, values=(), error_message="Diffusion : aucune réponse attendue")
         if rx is None:
             return record(ExchangeStatus.TIMEOUT, None, None, error_message=f"Timeout ({timeout:g} ms)")
 

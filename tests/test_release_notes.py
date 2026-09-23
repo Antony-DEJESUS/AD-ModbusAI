@@ -32,3 +32,20 @@ def test_a_tag_that_does_not_match_stops_the_release():
 def test_an_unknown_version_is_refused():
     with pytest.raises(SystemExit, match="Aucune section"):
         section("42.0.0")
+
+
+def test_notes_survive_a_redirected_windows_console():
+    """Le runner Windows redirige la sortie vers notes.md : en cp1252, le « Ω »
+    d'un CHANGELOG faisait échouer la publication."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONIOENCODING", "PYTHONUTF8")}
+    proc = subprocess.run(
+        [sys.executable, "tools/release_notes.py", "1.4.1"], capture_output=True, cwd=root, env=env, timeout=30
+    )
+    assert proc.returncode == 0, proc.stderr.decode("utf-8", "replace")
+    assert "120 Ω" in proc.stdout.decode("utf-8")
