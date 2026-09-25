@@ -13,6 +13,11 @@ titre et le nom de l'exécutable.
   série derrière, et beaucoup de supervisions l'envoient par défaut : leurs
   requêtes étaient ignorées (« adresse non servie »). En RTU, la plage reste
   1 à 247.
+- **Port série fermé pendant un travail** (câble USB débranché en pleine
+  campagne) : sous Linux, le travail s'arrêtait sur une erreur Python brute
+  au lieu d'annoncer « Liaison fermée ». Toute faute d'entrée / sortie d'un
+  port fermé sous les pieds de la liaison se dit maintenant ainsi.
+
 ## 1.4.1 - Test complet : corrections
 
 Passage en revue de toutes les fonctions sur le simulateur Modbus TCP, par le

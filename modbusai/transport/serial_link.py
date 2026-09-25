@@ -29,6 +29,9 @@ from modbusai.transport.records import (
 _PARITY = {Parity.NONE: serial.PARITY_NONE, Parity.EVEN: serial.PARITY_EVEN, Parity.ODD: serial.PARITY_ODD}
 _STOPBITS = {1.0: serial.STOPBITS_ONE, 1.5: serial.STOPBITS_ONE_POINT_FIVE, 2.0: serial.STOPBITS_TWO}
 _BYTESIZE = {7: serial.SEVENBITS, 8: serial.EIGHTBITS}
+# Port fermé par un autre fil en pleine lecture : sous Linux, pyserial passe un
+# descripteur None à select() et lève TypeError ; sous Windows, SerialException.
+_IO_ERRORS = (serial.SerialException, OSError, TypeError, ValueError)
 
 
 class SerialLink:
@@ -121,9 +124,8 @@ class SerialLink:
             t1 = time.perf_counter_ns()
             if self.settings.rts_toggle:
                 ser.rts = False
-        except (serial.SerialException, OSError) as exc:
-            self._fail(exc)
-            raise TransportError(f"Erreur d'émission : {exc}") from exc
+        except _IO_ERRORS as exc:
+            raise self._io_error(ser, exc, "Erreur d'émission") from exc
         self.counters.frames_tx += 1
         self.counters.bytes_tx += len(data)
         return RawFrame(direction=Direction.TX, data=bytes(data), t_first_ns=t0, t_last_ns=t1, wall_time=wall)
@@ -150,9 +152,8 @@ class SerialLink:
                     return self._account_rx(frame)
                 if now >= deadline:
                     return None
-        except (serial.SerialException, OSError) as exc:
-            self._fail(exc)
-            raise TransportError(f"Erreur de réception : {exc}") from exc
+        except _IO_ERRORS as exc:
+            raise self._io_error(ser, exc, "Erreur de réception") from exc
 
     def read_loop(self, stop: threading.Event) -> Iterator[RawFrame]:
         """Écoute continue : produit chaque trame vue sur le bus jusqu'à ``stop``.
@@ -170,15 +171,22 @@ class SerialLink:
                     frame = framer.flush(now)
                     if frame is not None:
                         yield self._account_rx(frame)
-        except (serial.SerialException, OSError) as exc:
-            self._fail(exc)
-            raise TransportError(f"Erreur de réception : {exc}") from exc
+        except _IO_ERRORS as exc:
+            raise self._io_error(ser, exc, "Erreur de réception") from exc
 
     # -------------------------------------------------------------- interne
     def _require_open(self) -> serial.Serial:
         if self._ser is None or not self._ser.is_open:
             raise TransportError("Liaison fermée")
         return self._ser
+
+    def _io_error(self, ser: serial.Serial, exc: Exception, what: str) -> TransportError:
+        """Traduit une faute d'entrée / sortie en TransportError. Un port fermé
+        par un autre fil pendant l'opération se dit « Liaison fermée »."""
+        self._fail(exc)
+        if not ser.is_open:
+            return TransportError("Liaison fermée")
+        return TransportError(f"{what} : {exc}")
 
     def _fail(self, exc: Exception) -> None:
         self.counters.io_errors += 1
