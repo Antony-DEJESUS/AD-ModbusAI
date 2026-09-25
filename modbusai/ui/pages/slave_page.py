@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 
 from modbusai.i18n import tr
 from modbusai.modbus.codec import Radix, format_int, parse_int
-from modbusai.modbus.slave import TABLE_SIZE, DataStore, HandledRequest, SlaveConfig, Table
+from modbusai.modbus.slave import TABLE_SIZE, DataStore, HandledRequest, SlaveConfig, Table, valid_slave_id
 from modbusai.transport.netinfo import is_wildcard, local_ipv4_addresses
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
 from modbusai.ui import highlights
@@ -234,8 +234,9 @@ class Led(QLabel):
         self.setStyleSheet(f"color: {off}; border: 1px solid {off}; border-radius: 9px; padding: 1px 8px;")
 
 
-def parse_slave_ids(text: str) -> set[int]:
-    """« 1-5, 10, 20 » -> {1,2,3,4,5,10,20}. Lève ValueError si vide ou hors 1..247."""
+def parse_slave_ids(text: str, tcp: bool = False) -> set[int]:
+    """« 1-5, 10, 20 » -> {1,2,3,4,5,10,20}. Lève ValueError si vide ou hors 1..247
+    (255 admis en TCP)."""
     ids: set[int] = set()
     for part in text.replace(";", ",").split(","):
         part = part.strip()
@@ -249,8 +250,10 @@ def parse_slave_ids(text: str) -> set[int]:
             ids.update(range(lo, hi + 1))
         else:
             ids.add(int(part))
-    if not ids or any(not 1 <= i <= 247 for i in ids):
-        raise ValueError("Adresses esclaves : valeurs entre 1 et 247, ex. « 1-5, 10 »")
+    if not ids or any(not valid_slave_id(i, tcp) for i in ids):
+        if tcp:
+            raise ValueError(tr("Adresses esclaves : valeurs entre 1 et 247, ou 255 en TCP, ex. « 1, 255 »"))
+        raise ValueError(tr("Adresses esclaves : valeurs entre 1 et 247, ex. « 1-5, 10 »"))
     return ids
 
 
@@ -283,7 +286,7 @@ class SlavePage(QWidget):
         # ---------------------------------------------------------- serveur
         self.slave_ids = QLineEdit("1")
         self.slave_ids.setMaximumWidth(text_width(self, "1-5, 10, 20", extra=28))
-        self.slave_ids.setToolTip(tr("Adresses servies, ex. « 1-5, 10 »"))
+        self.slave_ids.setToolTip(tr("Adresses servies, ex. « 1-5, 10 » ; en TCP, 255 = l'équipement lui-même"))
         self.delay = QSpinBox()
         self.delay.setRange(0, 5000)
         self.delay.setSuffix(" ms")
@@ -471,7 +474,7 @@ class SlavePage(QWidget):
     # ============================================================== config
     def config(self) -> SlaveConfig:
         return SlaveConfig(
-            slave_ids=parse_slave_ids(self.slave_ids.text()),
+            slave_ids=parse_slave_ids(self.slave_ids.text(), isinstance(self.link_settings(), TcpSettings)),
             response_delay_ms=float(self.delay.value()),
             drop_ratio=self.drop.value() / 100,
             corrupt_ratio=self.corrupt.value() / 100,

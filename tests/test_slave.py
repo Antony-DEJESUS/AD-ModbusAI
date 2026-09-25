@@ -5,7 +5,7 @@ from modbusai.modbus.crc import append_crc, check_crc
 from modbusai.modbus.pdu import build_adu, parse_response
 from modbusai.modbus.records import FunctionCode as FC
 from modbusai.modbus.records import Request
-from modbusai.modbus.slave import DataStore, SlaveConfig, SlaveHandler, Table
+from modbusai.modbus.slave import DataStore, SlaveConfig, SlaveHandler, Table, valid_slave_id
 
 
 def make():
@@ -111,3 +111,22 @@ def test_increment_animation():
     assert store.get(Table.HOLDING_REGISTERS, 0, 4) == [20, 20, 20, 0]
     store.increment(Table.COILS, 0, 2)
     assert store.get(Table.COILS, 0, 3) == [1, 1, 0]
+
+
+def test_unit_id_255_accepted_over_tcp_only():
+    assert valid_slave_id(255, tcp=True)
+    assert not valid_slave_id(255, tcp=False)
+    assert not valid_slave_id(248, tcp=True)
+    assert not valid_slave_id(0, tcp=True)  # la diffusion n'est pas une adresse servie
+
+
+def test_unit_id_255_served_over_tcp():
+    """Trame relevée sur site : une supervision lit 6 registres en 2001, unit ID 255."""
+    store = DataStore()
+    store.set(Table.HOLDING_REGISTERS, 2001, [1, 2, 3, 4, 5, 6])
+    handler = SlaveHandler(store, SlaveConfig(slave_ids={1, 255}))
+    res = handler.handle_pdu(0xFF, bytes.fromhex("0307D10006"))
+    assert res.kind == "réponse"
+    assert res.response == bytes.fromhex("030C000100020003000400050006")
+    only_one = SlaveHandler(store, SlaveConfig(slave_ids={1}))
+    assert only_one.handle_pdu(0xFF, bytes.fromhex("0307D10006")).kind == "ignorée"

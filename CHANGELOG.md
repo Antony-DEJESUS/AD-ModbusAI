@@ -5,6 +5,14 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 1.4.2 - Le serveur esclave répond au Unit ID 255 en TCP
+
+- **Serveur esclave en Modbus TCP** : l'adresse 255 est maintenant admise dans
+  la liste des esclaves servis (ex. « 1, 255 »), dans la fenêtre comme par le
+  serveur MCP. En TCP, 255 désigne l'équipement lui-même, sans passerelle
+  série derrière, et beaucoup de supervisions l'envoient par défaut : leurs
+  requêtes étaient ignorées (« adresse non servie »). En RTU, la plage reste
+  1 à 247.
 ## 1.4.1 - Test complet : corrections
 
 Passage en revue de toutes les fonctions sur le simulateur Modbus TCP, par le

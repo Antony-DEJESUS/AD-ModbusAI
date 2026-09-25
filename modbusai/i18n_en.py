@@ -378,7 +378,9 @@ EN: dict[str, str] = {
     "  |  {p0} réponse(s) corrompue(s) ou incohérente(s) à examiner": "  |  {p0} corrupted or inconsistent reply(ies) to examine",
     "Résultats du scan copiés ({p0} lignes)": "Scan results copied ({p0} lines)",
     # ------------------------------------------------------------- esclave
-    "Adresses servies, ex. « 1-5, 10 »": 'Served addresses, e.g. "1-5, 10"',
+    "Adresses servies, ex. « 1-5, 10 » ; en TCP, 255 = l'équipement lui-même": (
+        'Served addresses, e.g. "1-5, 10"; over TCP, 255 = the device itself'
+    ),
     "Délai avant chaque réponse (simule un esclave lent)": "Delay before each reply (simulates a slow slave)",
     "Part des requêtes volontairement ignorées (simule des timeouts)": "Share of requests deliberately ignored (simulates timeouts)",
     "Part des réponses au CRC volontairement faux (simule du bruit)": "Share of replies with deliberately wrong CRC (simulates noise)",
@@ -407,6 +409,9 @@ EN: dict[str, str] = {
     "Serveur esclave actif sur {p0}": "Slave server active on {p0}",
     "Serveur esclave arrêté": "Slave server stopped",
     "Adresses esclaves : valeurs entre 1 et 247, ex. « 1-5, 10 »": 'Slave addresses: values between 1 and 247, e.g. "1-5, 10"',
+    "Adresses esclaves : valeurs entre 1 et 247, ou 255 en TCP, ex. « 1, 255 »": (
+        'Slave addresses: values between 1 and 247, or 255 over TCP, e.g. "1, 255"'
+    ),
     "Requêtes {p0}  |  réponses {p1}  |  exceptions {p2}  |  écritures {p3}  |  ignorées {p4}  |  perdues {p5}  |  corrompues {p6}": "Requests {p0}  |  replies {p1}  |  exceptions {p2}  |  writes {p3}  |  ignored {p4}  |  dropped {p5}  |  corrupted {p6}",
     "Bobines (0xxxx)": "Coils (0xxxx)",
     "Entrées TOR (1xxxx)": "Discrete inputs (1xxxx)",

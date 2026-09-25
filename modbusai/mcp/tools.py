@@ -25,7 +25,7 @@ from modbusai.mcp import render
 from modbusai.mcp.protocol import Tool, ToolError, obj
 from modbusai.mcp.service import MAX_SNIFF_S, Job, ModbusService
 from modbusai.modbus.records import FunctionCode, Request
-from modbusai.modbus.slave import TABLE_SIZE, SlaveConfig, Table
+from modbusai.modbus.slave import TABLE_SIZE, SlaveConfig, Table, valid_slave_id
 from modbusai.transport.ports import list_serial_ports
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
 
@@ -802,8 +802,12 @@ def _slave_start(service: ModbusService) -> Tool:
         if isinstance(ids, int):
             ids = [ids]
         slave_ids = set(_values({"slaves": ids}, "slaves"))
-        if not all(1 <= i <= 247 for i in slave_ids):
-            raise ToolError("Argument « slaves » : adresses 1 à 247 (0 est la diffusion, que tout esclave écoute déjà).")
+        settings = link_settings(args)
+        if not all(valid_slave_id(i, isinstance(settings, TcpSettings)) for i in slave_ids):
+            raise ToolError(
+                "Argument « slaves » : adresses 1 à 247, plus 255 en TCP "
+                "(0 est la diffusion, que tout esclave écoute déjà)."
+            )
         delay = _float(args, "response_delay_ms", 0.0) or 0.0
         if not 0.0 <= delay <= 10_000.0:
             raise ToolError("Argument « response_delay_ms » : entre 0 et 10000 ms.")
@@ -814,7 +818,7 @@ def _slave_start(service: ModbusService) -> Tool:
             corrupt_ratio=_ratio(args, "corrupt_ratio"),
             read_only=_bool(args, "read_only"),
         )
-        server = service.slave_start(link_settings(args), config)
+        server = service.slave_start(settings, config)
         served = ", ".join(str(i) for i in sorted(config.slave_ids))
         lines = [
             f"Serveur esclave démarré sur {_listen_line(server)}.",
@@ -838,7 +842,7 @@ def _slave_start(service: ModbusService) -> Tool:
     schema = obj(
         {
             **LINK_PROPERTIES,
-            "slaves": {"type": "array", "items": {"type": "integer"}, "default": [1], "description": "Adresses servies. Une requête vers une autre adresse est ignorée, comme le ferait un vrai bus."},
+            "slaves": {"type": "array", "items": {"type": "integer"}, "default": [1], "description": "Adresses servies, 1 à 247. En TCP, 255 désigne l'équipement lui-même : beaucoup de supervisions l'envoient par défaut. Une requête vers une autre adresse est ignorée, comme le ferait un vrai bus."},
             "read_only": {"type": "boolean", "default": False, "description": "Refuser les écritures avec l'exception 04 : vérifie qu'une supervision n'écrit pas là où elle ne devrait pas."},
             "response_delay_ms": {"type": "number", "default": 0, "description": "Attente avant chaque réponse : simule un esclave lent pour régler les timeouts d'une supervision."},
             "drop_ratio": {"type": "number", "default": 0, "description": "Part des requêtes volontairement laissées sans réponse, 0 à 1 : simule des timeouts."},

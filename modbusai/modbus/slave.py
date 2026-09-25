@@ -76,6 +76,16 @@ class DataStore:
             self.version += 1
 
 
+# En Modbus TCP, 255 (0xFF) désigne l'équipement lui-même, sans passerelle série
+# derrière : beaucoup de supervisions l'envoient par défaut.
+TCP_UNIT_ID = 0xFF
+
+
+def valid_slave_id(slave: int, tcp: bool) -> bool:
+    """Adresse qu'un serveur esclave peut servir : 1..247, plus 255 en TCP."""
+    return 1 <= slave <= 247 or (tcp and slave == TCP_UNIT_ID)
+
+
 @dataclass(slots=True)
 class SlaveConfig:
     slave_ids: set[int] = field(default_factory=lambda: {1})
