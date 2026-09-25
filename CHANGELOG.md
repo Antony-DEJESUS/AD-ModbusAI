@@ -5,6 +5,17 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 1.4.3 - Éditer une case pendant qu'un maître interroge
+
+- **Serveur esclave** : pendant qu'un maître interrogeait le serveur, une case
+  de la grille ne pouvait plus être modifiée à la main. Chaque rafraîchissement
+  (surlignage vert des zones lues, relecture de la table) recopiait la valeur
+  de la table dans la case en cours d'édition et effaçait la saisie toutes les
+  80 ms. Une saisie commencée est désormais laissée intacte jusqu'à Entrée ou
+  Échap.
+- **Onglet Maître** : même protection pour la grille des valeurs pendant la
+  scrutation cyclique.
+
 ## 1.4.2 - Le serveur esclave répond au Unit ID 255 en TCP
 
 - **Serveur esclave en Modbus TCP** : l'adresse 255 est maintenant admise dans

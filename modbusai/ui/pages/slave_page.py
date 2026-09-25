@@ -38,6 +38,7 @@ from modbusai.ui.style import PAGE_MARGINS
 from modbusai.ui.widgets.labels import section
 from modbusai.ui.widgets.log_console import SLAVE_COLUMNS, LogPanel
 from modbusai.ui.widgets.stat_tiles import StatTiles
+from modbusai.ui.widgets.typing_delegate import TypingDelegate
 
 COLUMNS = 10
 
@@ -404,6 +405,7 @@ class SlavePage(QWidget):
 
         self.view = QTableView()
         self.view.setModel(self.model)
+        self.view.setItemDelegate(TypingDelegate(self.view))  # le trafic n'efface pas la saisie
         self.view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.view.verticalHeader().setDefaultSectionSize(22)
         self.view.setAlternatingRowColors(False)

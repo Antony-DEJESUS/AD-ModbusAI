@@ -15,6 +15,7 @@ from modbusai.ui import highlights
 from modbusai.ui.highlights import Highlight
 from modbusai.ui.metrics import text_width, use_tabular_figures
 from modbusai.ui.palette import State, color
+from modbusai.ui.widgets.typing_delegate import TypingDelegate
 
 _FLASH_TICK_MS = 80
 
@@ -41,6 +42,7 @@ class RegisterGrid(QTableWidget):
             | QAbstractItemView.EditTrigger.EditKeyPressed
             | QAbstractItemView.EditTrigger.AnyKeyPressed
         )
+        self.setItemDelegate(TypingDelegate(self))  # la scrutation n'efface pas la saisie
         self.setMinimumWidth(text_width(self, "400001   -32768", extra=48))
         use_tabular_figures(self)
         self.hide_zeros = False

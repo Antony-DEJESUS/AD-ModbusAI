@@ -67,6 +67,7 @@ modbusai/ui/                   couche 3 : Qt uniquement
     metrics.py                 largeurs et hauteurs tirées du texte, police à chiffres tabulaires
     widgets/labels.py          section() et muted() : étiquettes typées par la feuille de style
     widgets/stat_tiles.py      rangée de compteurs : valeur lisible, libellé discret, couleur si non nul
+    widgets/typing_delegate.py délégué d'édition : un rafraîchissement n'efface pas une saisie en cours
     resources.py               logo, icône, CHANGELOG, mode d'emploi PDF (compatible PyInstaller)
     network_tools.py           ping système dans un thread, ouverture de ncpa.cpl (Windows)
     pages/                     master_page, sniffer_page, scan_page, diagnostic_page, slave_page

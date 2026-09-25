@@ -1,6 +1,6 @@
 [project]
 name = "modbusai"
-version = "1.4.2"
+version = "1.4.3"
 description = "Outil de diagnostic Modbus RTU / RS-485"
 requires-python = ">=3.11"
 
