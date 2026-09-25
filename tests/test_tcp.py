@@ -99,7 +99,7 @@ def test_master_over_tcp():
             assert ident.ok and decode_device_id(bytes(ident.values)).vendor == "ModbusAI"
             assert slave.server.counters.connections == 1 and slave.server.counters.frames_rx == 5
             kinds = [h.kind for h in slave.handled]
-            assert kinds == ["réponse", "réponse", "exception", "ignorée", "réponse"]
+            assert kinds == ["réponse", "réponse", "exception", "mauvais esclave", "réponse"]
         finally:
             link.close()
         assert link.state is LinkState.CLOSED

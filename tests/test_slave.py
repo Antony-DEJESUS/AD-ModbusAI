@@ -54,7 +54,7 @@ def test_exceptions_and_ignored():
     assert res.kind == "exception" and res.response[2] == 0x01
     # autre adresse : silence
     res = h.handle(build_adu(Request(3, FC.READ_HOLDING_REGISTERS, 0, 1)))
-    assert res.kind == "ignorée" and res.response is None
+    assert res.kind == "mauvais esclave" and res.response is None
     # CRC faux : silence
     bad = bytearray(build_adu(Request(1, FC.READ_HOLDING_REGISTERS, 0, 1)))
     bad[-1] ^= 0xFF
@@ -129,4 +129,4 @@ def test_unit_id_255_served_over_tcp():
     assert res.kind == "réponse"
     assert res.response == bytes.fromhex("030C000100020003000400050006")
     only_one = SlaveHandler(store, SlaveConfig(slave_ids={1}))
-    assert only_one.handle_pdu(0xFF, bytes.fromhex("0307D10006")).kind == "ignorée"
+    assert only_one.handle_pdu(0xFF, bytes.fromhex("0307D10006")).kind == "mauvais esclave"

@@ -26,7 +26,15 @@ from PySide6.QtWidgets import (
 
 from modbusai.i18n import tr
 from modbusai.modbus.codec import Radix, format_int, parse_int
-from modbusai.modbus.slave import TABLE_SIZE, DataStore, HandledRequest, SlaveConfig, Table, valid_slave_id
+from modbusai.modbus.slave import (
+    TABLE_SIZE,
+    WRONG_SLAVE,
+    DataStore,
+    HandledRequest,
+    SlaveConfig,
+    Table,
+    valid_slave_id,
+)
 from modbusai.transport.netinfo import is_wildcard, local_ipv4_addresses
 from modbusai.transport.records import LinkSettings, Parity, SerialSettings, TcpSettings
 from modbusai.ui import highlights
@@ -235,6 +243,35 @@ class Led(QLabel):
         self.setStyleSheet(f"color: {off}; border: 1px solid {off}; border-radius: 9px; padding: 1px 8px;")
 
 
+class RunBadge(QLabel):
+    """État du serveur, à la façon du voyant RUN / STOP d'un automate : vert
+    plein quand il sert, orange quand il est arrêté."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setMinimumWidth(text_width(self, "STOP", extra=28))
+        self._running = False
+        self.set_running(False)
+
+    @property
+    def running(self) -> bool:
+        return self._running
+
+    def set_running(self, running: bool) -> None:
+        self._running = running
+        self.setText(tr("RUN") if running else tr("STOP"))
+        self.setToolTip(tr("Serveur en marche : il répond au maître") if running else tr("Serveur arrêté"))
+        self.repaint_state()
+
+    def repaint_state(self) -> None:
+        """Nuance du thème courant (posée en code, pas en QSS)."""
+        tint = color(State.OK if self._running else State.WARN)
+        self.setStyleSheet(
+            f"color: {tint}; border: 2px solid {tint}; border-radius: 4px; padding: 1px 8px; font-weight: 700;"
+        )
+
+
 def parse_slave_ids(text: str, tcp: bool = False) -> set[int]:
     """« 1-5, 10, 20 » -> {1,2,3,4,5,10,20}. Lève ValueError si vide ou hors 1..247
     (255 admis en TCP)."""
@@ -308,6 +345,7 @@ class SlavePage(QWidget):
         set_icon(self.link_btn, "settings")
         set_icon(self.start_btn, "play", on_accent=True)
         set_icon(self.stop_btn, "stop")
+        self.run_badge = RunBadge()
         self.rx_led = Led(tr("RX"), State.OK)
         self.tx_led = Led(tr("TX"), State.ERROR)
         self.tiles = StatTiles(
@@ -329,6 +367,8 @@ class SlavePage(QWidget):
         # ce qu'on sert, par quelle liaison, puis ce qu'on simule.
         server_row = QHBoxLayout()
         server_row.setSpacing(8)
+        server_row.addWidget(self.run_badge)
+        server_row.addWidget(_vsep())
         server_row.addWidget(section(tr("ESCLAVES")))
         server_row.addWidget(self.slave_ids)
         server_row.addWidget(self.read_only)
@@ -548,6 +588,7 @@ class SlavePage(QWidget):
 
     def on_started(self, settings: LinkSettings) -> None:
         self._serving = True
+        self.run_badge.set_running(True)
         self._tcp = isinstance(settings, TcpSettings)
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
@@ -574,6 +615,7 @@ class SlavePage(QWidget):
 
     def on_stopped(self) -> None:
         self._serving = False
+        self.run_badge.set_running(False)
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
         for w in (
@@ -616,6 +658,7 @@ class SlavePage(QWidget):
         nuances du thème courant (elles sont posées en code, pas en QSS)."""
         for led, state in ((self.rx_led, State.OK), (self.tx_led, State.ERROR)):
             led.set_state(state)
+        self.run_badge.repaint_state()
         self.tiles.repaint()
 
     # ====================================================== maîtres connectés
@@ -665,6 +708,11 @@ class SlavePage(QWidget):
         if not self.log_enabled.isChecked():
             return
         served = result.kind in ("réponse", "broadcast")
+        detail = result.detail
+        if result.kind == WRONG_SLAVE:
+            detail = tr("esclave {p0} interrogé, le serveur répond à {p1}").format(
+                p0=result.slave_id, p1=self.slave_ids.text()
+            )
         self.log_panel.console.log_cells(
             (
                 datetime.now().strftime("%H:%M:%S.%f")[:-3],
@@ -677,7 +725,7 @@ class SlavePage(QWidget):
             ),
             state=State.OK if served else State.WARN,
             highlight=4,
-            detail=result.detail,
+            detail=detail,
         )
 
     def on_store_changed(self) -> None:

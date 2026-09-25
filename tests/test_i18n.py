@@ -34,7 +34,7 @@ def dynamic_keys() -> set[str]:
         {e.value for e in ScanStatus} | {e.value for e in FrameKind} | {t.value for t in Tab} | {r.value for r in Role}
     )
     keys |= set(EXCEPTION_LABELS.values()) | {label for _lo, _hi, label, _c in SCORE_LEGEND} | {SCORE_EXPLANATION}
-    keys |= {"réponse", "exception", "ignorée", "perdue", "broadcast", "corrompue", "invalide"}
+    keys |= {"réponse", "exception", "ignorée", "mauvais esclave", "perdue", "broadcast", "corrompue", "invalide"}
     for info in CATALOGUE.values():
         keys |= {info.title, info.summary, info.trigger, *info.causes, *info.how_to_confirm}
     return keys

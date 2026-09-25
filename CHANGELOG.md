@@ -5,6 +5,16 @@ fonctionnelle (phase 1 = 0.1, phase 2 = 0.2…), Z = corrections. La version est
 définie une seule fois dans `modbusai/__init__.py` et reprise par la barre de
 titre et le nom de l'exécutable.
 
+## 1.5.0 - Serveur esclave : voyant RUN / STOP et « mauvais esclave »
+
+- **Voyant RUN / STOP** en tête de l'onglet Serveur esclave, comme sur un
+  automate : vert quand le serveur répond, orange quand il est arrêté.
+- **« mauvais esclave »** : une requête correcte adressée à un numéro que le
+  serveur ne sert pas n'est plus confondue avec les autres trames ignorées.
+  Le journal le dit en clair, par exemple « esclave 255 interrogé, le serveur
+  répond à 1 » : c'est presque toujours un numéro mal saisi côté supervision.
+  Elle compte toujours dans IGNORÉES.
+
 ## 1.4.3 - Éditer une case pendant qu'un maître interroge
 
 - **Serveur esclave** : pendant qu'un maître interrogeait le serveur, une case

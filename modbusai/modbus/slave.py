@@ -80,6 +80,9 @@ class DataStore:
 # derrière : beaucoup de supervisions l'envoient par défaut.
 TCP_UNIT_ID = 0xFF
 
+# Motif d'une requête adressée à un numéro d'esclave que le serveur ne sert pas.
+WRONG_SLAVE = "mauvais esclave"
+
 
 def valid_slave_id(slave: int, tcp: bool) -> bool:
     """Adresse qu'un serveur esclave peut servir : 1..247, plus 255 en TCP."""
@@ -118,7 +121,7 @@ class HandledRequest:
     response: bytes | None
     slave_id: int | None
     function: int | None
-    kind: str  # "réponse", "exception", "ignorée", "perdue", "broadcast", "corrompue", "invalide"
+    kind: str  # "réponse", "exception", "mauvais esclave", "ignorée", "perdue", "broadcast", "corrompue", "invalide"
     detail: str = ""
     access: Access | None = None  # zone de la table touchée, pour la mettre en évidence
 
@@ -177,8 +180,14 @@ class SlaveHandler:
         body = pdu[1:]
         broadcast = slave == 0
         if not broadcast and slave not in self.config.slave_ids:
+            # Trame correcte, adressée à un autre esclave : le cas le plus fréquent
+            # en mise en service (numéro mal saisi côté supervision), d'où un motif
+            # à part plutôt que « ignorée ».
             c.ignored += 1
-            return HandledRequest(pdu, None, slave, fc, "ignorée", "adresse non servie")
+            served = ", ".join(str(i) for i in sorted(self.config.slave_ids))
+            return HandledRequest(
+                pdu, None, slave, fc, WRONG_SLAVE, f"esclave {slave} interrogé, le serveur répond à {served}"
+            )
         try:
             function = FunctionCode(fc)
         except ValueError:
